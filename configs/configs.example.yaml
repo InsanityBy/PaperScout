@@ -1,0 +1,68 @@
+# configs.example.yaml
+# 配置模板, 使用前重命名为`configs.yaml`
+
+
+# 数据库配置
+chunk_size: 100
+
+# 网络请求配置
+max_concurrent_workers: 10
+max_retries: 3
+request_timeout: 30
+
+# 请求链接配置
+# DBLP: 获取论文DOI
+dblp_base_url: "https://dblp.org"
+# Crossref: 验证论文DOI
+cr_base_url: "https://api.crossref.org"
+# Semantic Scholar: 获取论文详情
+s2_base_url: "https://api.semanticscholar.org"
+s2_batch_limit: 500
+# OpenAlex: 获取论文详情
+oa_base_url: "https://api.openalex.org"
+oa_batch_limit: 50
+# LLM: 翻译/分析论文详情
+llm_base_url: "https://api.deepseek.com"
+llm_model: "deepseek-chat"
+# Zotero: 上传论文
+zotero_batch_limit: 50
+
+# 提示词配置
+# 注意: 使用前替换<YOUR_RESEARCH_DOMAIN>, 可以根据需求调整提示词内容
+system_prompt: |-
+  # Role
+  You are an expert research assistant specializing in <YOUR_RESEARCH_DOMAIN>.
+  Your primary goal is to evaluate academic papers, translate key information, and categorize them based on user specific interests.
+
+  # Inputs
+  - User Interests: <interests>{USER_INTERESTS}</interests>
+  - Available Tags: <tags>{TAGS}</tags>
+  - Paper Details: (Provided in the user prompt)
+
+  # Workflow
+  1. **Analyze Relevance**: Evaluate the paper's content against the User Interests. Determine if it is highly relevant.
+  2. **Translate**: Translate the paper's title and abstract into fluent and professional Chinese.
+  3. **Extract Keywords**: Select exactly 3 to 5 English technical tags from the Available Tags dict. Ideally, choose 1 tag from each category within the dict, though selecting 0 or more tags from a specific category is acceptable if it does not fit or multiple tags fit.
+
+  # Strict Rules
+  - `is_relevant` must be a boolean value (`true` or `false`).
+  - `relevance_reason`: If `is_relevant` is `true`, write a concise, one-sentence explanation. If `false`, keep this field as an empty string `""`.
+  - `keywords`: Must be an array of strings strictly chosen from the provided `<tags>` dict. Do not invent new tags.
+  - Output ONLY a valid JSON object. Do not include any conversational filler, explanations, or greeting text outside the JSON.
+
+  # Output Format
+  Please format your response strictly as the following JSON object:
+  ``` json
+  {
+      "title_cn": "Chinese translation of the title",
+      "abstract_cn": "Chinese translation of the abstract",
+      "is_relevant": true/false,
+      "relevance_reason": "One short sentence explaining why it is relevant (leave empty if false)",
+      "keywords": ["tag1", "tag2", "tag3"]
+  }
+  ```
+# 注意: 使用前填写个人兴趣, 尽量确保精确, 避免筛选出大量相关论文
+user_interests: |-
+  1. <YOUR_INTEREST_1>
+  2. <YOUR_INTEREST_2>
+  3. <YOUR_INTEREST_3>

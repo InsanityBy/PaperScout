@@ -1,0 +1,18 @@
+# tags.example.yaml
+# 标签配置模板, 使用前重命名为`tags.yaml`
+
+# 格式说明
+# <标签类型1>:
+#   - <标签1>
+#   - <标签2>
+# <标签类型2>:
+#   - <标签1>
+#   - <标签2>
+
+
+Domain:
+  - Machine_Learning
+  - Systems_Architecture
+Contribution:
+  - New_Algorithm
+  - New_Dataset_or_Benchmark

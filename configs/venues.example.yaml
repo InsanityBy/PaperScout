@@ -1,0 +1,21 @@
+# venues.example.yaml
+# 来源配置模板, 使用前重命名为`venues.yaml`
+
+# 仅支持从DBLP获取论文, 根据DBLP的数据组织形式, 来源划分为:
+# 1. JOURNAL: 期刊
+# 2. CONFERENCE: 会议
+# 来源链接可以从`https://dblp.org/`查询获取
+
+# 格式说明
+# JOURNAL:
+#   <自定义名称1>: <来源链接1>
+#   <自定义名称2>: <来源链接2>
+# CONFERENCE:
+#   <自定义名称1>: <来源链接1>
+#   <自定义名称2>: <来源链接2>
+
+
+JOURNAL:
+  TACO: db/journals/taco/index.html
+CONFERENCE:
+  ISCA: db/conf/isca/index.html
