@@ -26,13 +26,16 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--run-all", "-a", action="store_true",
                        help="Run complete workflow")
-    group.add_argument("--stage", choices=["fetch", "parse", "analyze", "filter", "upload"],
+    group.add_argument("--stage", choices=["fetch", "parse", "analyze", "filter", "output"],
                        help="Run specified stage")
+    parser.add_argument("--output-mode", "-o", type=str.lower, default="export",
+                        choices=["none", "export", "upload"],
+                        help="Select output mode after filtering (default: export)")
     parser.add_argument("--log-directory", type=Path, default=Path("logs"),
-                        help="Directory to store log files")
+                        help="Directory to store log files (default: logs)")
     parser.add_argument("--log-level", type=str.upper, default="INFO",
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                        help="Set the logging level")
+                        help="Set the logging level (default: INFO)")
     args = parser.parse_args()
     # 设置全局日志记录
     set_global_logger(
@@ -44,7 +47,8 @@ def main():
     print("=" * 50)
     print("\nPaperScout started!\n")
     # 创建工作流程
-    pipeline = Pipeline(start_year=args.start_year, end_year=args.end_year)
+    pipeline = Pipeline(
+        start_year=args.start_year, end_year=args.end_year, output_mode=args.output_mode)
     # 执行指定阶段或完整工作流程
     try:
         if args.run_all:
@@ -57,8 +61,8 @@ def main():
             pipeline.run_analyze_stage()
         elif args.stage == "filter":
             pipeline.run_filter_stage(refilter=True)
-        elif args.stage == "upload":
-            pipeline.run_upload_stage()
+        elif args.stage == "output":
+            pipeline.run_output_stage()
         else:
             parser.print_help()
     except Exception as e:

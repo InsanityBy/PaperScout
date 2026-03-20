@@ -42,7 +42,8 @@ signal.signal(signal.SIGTERM, _signal_handler)
 class Pipeline:
     """工作流程"""
 
-    def __init__(self, start_year: int, end_year: int) -> None:
+    def __init__(self, start_year: int, end_year: int, output_mode: str = "export") -> None:
+        self.output_mode = output_mode
         init_database()
         self.fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
         self.parser = DOIParser()
@@ -74,8 +75,8 @@ class Pipeline:
         self.run_filter_stage()
         if shutdown_event.is_set():
             return
-        # 上传论文
-        self.run_upload_stage()
+        # 输出论文
+        self.run_output_stage()
         if shutdown_event.is_set():
             return
         logger.info("=" * 50)
@@ -142,8 +143,8 @@ class Pipeline:
         logger.info("[4/5] Finish filtering papers")
         print("[4/5] Finish filtering papers\n")
 
-    def run_upload_stage(self) -> None:
-        """上传论文"""
+    def run_output_stage(self) -> None:
+        """输出论文"""
         logger.info("-" * 50)
         logger.info("[5/5] Start uploading papers...")
         print("-" * 50)

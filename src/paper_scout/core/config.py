@@ -20,6 +20,7 @@ from pydantic_settings import (
 from paper_scout.core.constant import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONFIG_DIRECTORY,
+    DEFAULT_EXPORT_DIRECTORY,
     DEFAULT_MAX_CONCURRENT_WORKERS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_REQUEST_TIMEOUT,
@@ -90,6 +91,8 @@ class AppConfig(BaseSettings):
         le=ZOTERO_MAX_BATCH_LIMIT, default=ZOTERO_MAX_BATCH_LIMIT)
     # 分析配置
     relevance_threshold: float = 7.0  # 相关性阈值, 用于筛选出相关性高的论文
+    # 导出配置
+    export_directory: Path = DEFAULT_EXPORT_DIRECTORY
     # 提示词配置
     system_prompt: str = ""
     user_interests: str = ""
