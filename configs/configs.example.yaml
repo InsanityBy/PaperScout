@@ -59,7 +59,7 @@ system_prompt: |-
       "title_cn": "Chinese translation of the title",
       "abstract_cn": "Chinese translation of the abstract",
       "relevance_score": 8.5,
-      "relevance_reason": "One short explanation of the score based on the overall content of paper's abstract and tag match with user interests",
+      "relevance_reason": "One short Chinese explanation of the score based on the overall content of paper's abstract and tag match with user interests",
       "keywords": ["tag1", "tag2", "tag3"]
   }
   ```

@@ -37,8 +37,10 @@ class LLMAnalyzer:
 
     def __init__(self) -> None:
         # 创建instructor包装的OpenAI客户端
-        self.client = instructor.patch(
-            OpenAI(api_key=configs.llm_api_key, base_url=configs.llm_base_url))
+        self.client = instructor.from_openai(
+            OpenAI(api_key=configs.llm_api_key, base_url=configs.llm_base_url),
+            mode=instructor.Mode.JSON
+        )
         # 获取标签
         tags = configs.tags
         self.valid_tags = {tag for tag_list in configs.tags.values() for tag in tag_list}
@@ -116,15 +118,20 @@ class LLMAnalyzer:
     @limits(calls=LLM_RATE_LIMIT, period=LLM_PERIOD)
     def _call_llm_api(self, user_prompt: str) -> PaperAnalysisResult:
         """调用LLM API分析论文"""
-        return self.client.chat.completions.create(
-            model=configs.llm_model,
+        response_generator = self.client.chat.completions.create_partial(
             response_model=PaperAnalysisResult,
             messages=[
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
+            max_retries=0,
+            model=configs.llm_model,
             timeout=configs.request_timeout
         )
+        final_result = None
+        for partial_result in response_generator:
+            final_result = partial_result
+        return final_result
 
     def _update_paper(self, paper: Paper, data: PaperAnalysisResult) -> bool:
         """更新论文"""
