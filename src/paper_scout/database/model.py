@@ -5,7 +5,7 @@
 import enum
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, func, Index, Integer, String, text, Text
+from sqlalchemy import DateTime, Float, func, Index, Integer, String, text, Text
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import TypeDecorator
@@ -36,14 +36,16 @@ class Status(enum.IntEnum):
     PENDING_PARSE = 110
     # 分析待处理
     PENDING_ANALYZE = 120
+    # 筛选待处理
+    PENDING_FILTER = 130
     # 上传待处理
-    PENDING_UPLOAD = 130
+    PENDING_UPLOAD = 140
 
     # 正常终止状态
     # 正常终止
     COMPLETED = 200
     # 不相关论文
-    IRRELEVANT = 220
+    IRRELEVANT = 230
 
     # 异常中间状态
     # 获取失败, 仅保留编号占位, 未使用
@@ -55,7 +57,7 @@ class Status(enum.IntEnum):
     # 分析失败
     ANALYZE_FAILED = 320
     # 上传失败
-    UPLOAD_FAILED = 330
+    UPLOAD_FAILED = 340
 
     # 异常终止状态
     # 永久失败, 需要手动处理
@@ -102,7 +104,7 @@ class Paper(Base):
     # 分析结果
     title_cn: Mapped[str] = mapped_column(String, default="", server_default=text("''"))
     abstract_cn: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
-    is_relevant: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    relevance_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
     relevance_reason: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
     tags_json: Mapped[str] = mapped_column(Text, default="[]", server_default=text("'[]'"))
 

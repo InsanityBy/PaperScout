@@ -26,7 +26,7 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--run-all", "-a", action="store_true",
                        help="Run complete workflow")
-    group.add_argument("--stage", choices=["fetch", "parse", "analyze", "upload"],
+    group.add_argument("--stage", choices=["fetch", "parse", "analyze", "filter", "upload"],
                        help="Run specified stage")
     parser.add_argument("--log-directory", type=Path, default=Path("logs"),
                         help="Directory to store log files")
@@ -55,6 +55,8 @@ def main():
             pipeline.run_parse_stage()
         elif args.stage == "analyze":
             pipeline.run_analyze_stage()
+        elif args.stage == "filter":
+            pipeline.run_filter_stage(refilter=True)
         elif args.stage == "upload":
             pipeline.run_upload_stage()
         else:
