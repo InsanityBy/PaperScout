@@ -27,7 +27,7 @@ class PaperAnalysisResult(BaseModel):
 
     title_cn: str = ""
     abstract_cn: str = ""
-    relevant_score: float = Field(ge=0.0, le=10.0, default=0.0)
+    relevance_score: float = Field(ge=0.0, le=10.0, default=0.0)
     relevance_reason: str = ""
     keywords: List[str] = []
 
@@ -138,7 +138,7 @@ class LLMAnalyzer:
         # 更新论文
         paper.title_cn = data.title_cn
         paper.abstract_cn = data.abstract_cn
-        paper.relevant_score = data.relevant_score
+        paper.relevance_score = data.relevance_score
         paper.relevance_reason = data.relevance_reason
         paper.tags_json = json.dumps(valid_keywords, ensure_ascii=False)
         return True

@@ -104,7 +104,7 @@ class Paper(Base):
     # 分析结果
     title_cn: Mapped[str] = mapped_column(String, default="", server_default=text("''"))
     abstract_cn: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
-    relevant_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    relevance_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
     relevance_reason: Mapped[str] = mapped_column(Text, default="", server_default=text("''"))
     tags_json: Mapped[str] = mapped_column(Text, default="[]", server_default=text("'[]'"))
 

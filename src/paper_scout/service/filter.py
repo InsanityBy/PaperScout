@@ -29,7 +29,7 @@ class PaperFilter:
         }
         # 根据阈值筛选
         for paper in papers:
-            if paper.relevant_score >= configs.relevance_threshold:
+            if paper.relevance_score >= configs.relevance_threshold:
                 filtered_papers[Status.PENDING_UPLOAD].append(paper)
             else:
                 filtered_papers[Status.IRRELEVANT].append(paper)
