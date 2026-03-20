@@ -88,6 +88,8 @@ class AppConfig(BaseSettings):
     llm_model: str = "deepseek-chat"
     zotero_batch_limit: PositiveInt = Field(
         le=ZOTERO_MAX_BATCH_LIMIT, default=ZOTERO_MAX_BATCH_LIMIT)
+    # 分析配置
+    relevance_threshold: float = 7.0  # 相关性阈值, 用于筛选出相关性高的论文
     # 提示词配置
     system_prompt: str = ""
     user_interests: str = ""

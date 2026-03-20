@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple
 
 import instructor
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from ratelimit import limits, sleep_and_retry
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 class PaperAnalysisResult(BaseModel):
     """论文分析结果"""
 
-    title_cn: str
-    abstract_cn: str
-    is_relevant: bool
-    relevance_reason: str
-    keywords: List[str]
+    title_cn: str = ""
+    abstract_cn: str = ""
+    relevant_score: float = Field(ge=0.0, le=10.0, default=0.0)
+    relevance_reason: str = ""
+    keywords: List[str] = []
 
 
 class LLMAnalyzer:
@@ -148,7 +148,7 @@ class LLMAnalyzer:
         # 更新论文
         paper.title_cn = data.title_cn
         paper.abstract_cn = data.abstract_cn
-        paper.is_relevant = data.is_relevant
+        paper.relevant_score = data.relevant_score
         paper.relevance_reason = data.relevance_reason
         paper.tags_json = json.dumps(valid_keywords, ensure_ascii=False)
         return True
@@ -159,7 +159,7 @@ class LLMAnalyzer:
         relevant_papers = {}
         irrelevant_papers = {}
         for doi, paper in papers.items():
-            if paper.is_relevant:
+            if paper.relevant_score >= configs.relevance_threshold:
                 relevant_papers[doi] = paper
             else:
                 irrelevant_papers[doi] = paper
