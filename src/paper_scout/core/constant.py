@@ -61,8 +61,7 @@ ZOTERO_RATE_LIMIT = 5
 DBLP_VENUE_RULE = {
     VenueType.CONFERENCE: {
         "tag": "proceedings",
-        "link_tag":
-        "url",
+        "link_tag": "url",
         "year_tag": "year"
     },
     VenueType.JOURNAL: {

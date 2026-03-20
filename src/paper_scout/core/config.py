@@ -113,7 +113,7 @@ class AppConfig(BaseSettings):
         init_settings: PydanticBaseSettingsSource,
         env_settings: PydanticBaseSettingsSource,
         dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource
     ) -> Tuple[PydanticBaseSettingsSource, ...]:
         """自定义配置源, 先加载.env, 再加载configs.yaml"""
         return (

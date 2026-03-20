@@ -17,6 +17,7 @@ from paper_scout.database.model import Paper, Status
 from paper_scout.service.analyzer import LLMAnalyzer
 from paper_scout.service.parser import DOIParser
 from paper_scout.service.fetcher import DBLPFetcher
+from paper_scout.service.filter import PaperFilter
 from paper_scout.service.uploader import ZoteroUploader
 
 
@@ -46,16 +47,17 @@ class Pipeline:
         self.fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
         self.parser = DOIParser()
         self.analyzer = LLMAnalyzer()
+        self.filter = PaperFilter()
         self.uploader = ZoteroUploader()
 
     def run_all(self) -> None:
         """运行所有流程"""
         logger.info("-" * 50)
         logger.info("Start running all stages...")
-        logger.info("Fetch -> Parse -> Analyze -> Upload")
+        logger.info("Fetch -> Parse -> Analyze -> Filter -> Upload")
         print("-" * 50)
         print("\nStart running all stages...")
-        print("Fetch -> Parse -> Analyze -> Upload\n")
+        print("Fetch -> Parse -> Analyze -> Filter -> Upload\n")
         # 获取论文
         self.run_fetch_stage()
         if shutdown_event.is_set():
@@ -66,6 +68,10 @@ class Pipeline:
             return
         # 分析论文
         self.run_analyze_stage()
+        if shutdown_event.is_set():
+            return
+        # 筛选论文
+        self.run_filter_stage()
         if shutdown_event.is_set():
             return
         # 上传论文
@@ -80,9 +86,9 @@ class Pipeline:
     def run_fetch_stage(self) -> None:
         """获取论文"""
         logger.info("-" * 50)
-        logger.info("[1/4] Start fetching papers...")
+        logger.info("[1/5] Start fetching papers...")
         print("-" * 50)
-        print("\n[1/4] Start fetching papers...")
+        print("\n[1/5] Start fetching papers...")
         saved_count = 0
         with SessionLocal() as session:
             for venue_name, papers_data in tqdm(
@@ -94,41 +100,58 @@ class Pipeline:
                 logger.info(f"[*] Fetched {len(papers_data)} papers from {venue_name}")
                 tqdm.write(f"[*] Fetched {len(papers_data)} papers from {venue_name}")
             session.commit()
-        logger.info(f"[1/4] Finish fetching papers, saved {saved_count} new papers")
-        print(f"[1/4] Finish fetching papers, saved {saved_count} new papers\n")
+        logger.info(f"[1/5] Finish fetching papers, saved {saved_count} new papers")
+        print(f"[1/5] Finish fetching papers, saved {saved_count} new papers\n")
 
     def run_parse_stage(self) -> None:
         """解析论文"""
         logger.info("-" * 50)
-        logger.info("[2/4] Start parsing papers...")
+        logger.info("[2/5] Start parsing papers...")
         print("-" * 50)
-        print("\n[2/4] Start parsing papers...")
+        print("\n[2/5] Start parsing papers...")
         for status in [Status.PENDING_PARSE, Status.PARSE_FAILED, Status.DOI_INVALID]:
             self.batch_process(current_status=status, process_function=self.parser.parse_all)
-        logger.info("[2/4] Finish parsing papers")
-        print("[2/4] Finish parsing papers\n")
+        logger.info("[2/5] Finish parsing papers")
+        print("[2/5] Finish parsing papers\n")
 
     def run_analyze_stage(self) -> None:
         """分析论文"""
         logger.info("-" * 50)
-        logger.info("[3/4] Start analyzing papers...")
+        logger.info("[3/5] Start analyzing papers...")
         print("-" * 50)
-        print("\n[3/4] Start analyzing papers...")
+        print("\n[3/5] Start analyzing papers...")
         for status in [Status.PENDING_ANALYZE, Status.ANALYZE_FAILED]:
             self.batch_process(current_status=status, process_function=self.analyzer.analyze_all)
-        logger.info("[3/4] Finish analyzing papers")
-        print("[3/4] Finish analyzing papers\n")
+        logger.info("[3/5] Finish analyzing papers")
+        print("[3/5] Finish analyzing papers\n")
+
+    def run_filter_stage(self, refilter: bool = False) -> None:
+        """筛选论文"""
+        logger.info("-" * 50)
+        logger.info("[4/5] Start filtering papers...")
+        print("-" * 50)
+        print("\n[4/5] Start filtering papers\n")
+        if refilter:
+            current_status_list = [Status.PENDING_FILTER, Status.PENDING_UPLOAD, Status.IRRELEVANT]
+            logger.info(f"[*] Refiltering papers")
+            print(f"[*] Refiltering papers")
+        else:
+            current_status_list = [Status.PENDING_FILTER]
+        for status in current_status_list:
+            self.batch_process(current_status=status, process_function=self.filter.filter_all)
+        logger.info("[4/5] Finish filtering papers")
+        print("[4/5] Finish filtering papers\n")
 
     def run_upload_stage(self) -> None:
         """上传论文"""
         logger.info("-" * 50)
-        logger.info("[4/4] Start uploading papers...")
+        logger.info("[5/5] Start uploading papers...")
         print("-" * 50)
-        print("\n[4/4] Start uploading papers...")
+        print("\n[5/5] Start uploading papers...")
         for status in [Status.PENDING_UPLOAD, Status.UPLOAD_FAILED]:
             self.batch_process(current_status=status, process_function=self.uploader.upload_all)
-        logger.info("[4/4] Finish uploading papers")
-        print("[4/4] Finish uploading papers\n")
+        logger.info("[5/5] Finish uploading papers")
+        print("[5/5] Finish uploading papers\n")
 
     def batch_process(self,
                       current_status: Status,
@@ -163,12 +186,12 @@ class Pipeline:
                         # 更新论文
                         for status, papers in processed_papers.items():
                             for paper in papers:
-                                if paper.retry_count > configs.max_retries:
-                                    paper.status = Status.PERMANENT_FAILED
                                 paper.status = status
                                 if status < 300:  # 成功状态
                                     paper.retry_count = 0
-                                else:   # 失败状态
+                                elif paper.retry_count > configs.max_retries:
+                                    paper.status = Status.PERMANENT_FAILED
+                                else:
                                     paper.retry_count = paper.retry_count + 1
                                 status_counter[status.name] += 1  # 状态计数
                             if papers:

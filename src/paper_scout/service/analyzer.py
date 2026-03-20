@@ -57,13 +57,13 @@ class LLMAnalyzer:
             return {}
         logger.info(f"Analyzing {len(papers)} papers...")
         analyzed_papers = {
-            Status.PENDING_UPLOAD: [],
-            Status.ANALYZE_FAILED: [],
-            Status.IRRELEVANT: [],
+            Status.PENDING_FILTER: [],
+            Status.ANALYZE_FAILED: []
         }
         # 分析论文
         papers_dict = {paper.doi: paper for paper in papers}
         analyzed, failed = self._analyze_papers(papers=papers_dict)
+        analyzed_papers[Status.PENDING_FILTER].extend(analyzed.values())
         if failed:
             analyzed_papers[Status.ANALYZE_FAILED].extend(failed.values())
             logger.warning(f"Failed to analyze {len(failed)} papers")
@@ -71,16 +71,6 @@ class LLMAnalyzer:
             logger.error("Failed to analyze any paper")
             return analyzed_papers
         logger.info(f"{len(analyzed)} papers analyzed successfully")
-        # 筛选相关的论文
-        relevant, irrelevant = self._filter_papers(papers=analyzed)
-        analyzed_papers[Status.PENDING_UPLOAD].extend(relevant.values())
-        if irrelevant:
-            analyzed_papers[Status.IRRELEVANT].extend(irrelevant.values())
-            logger.info(f"{len(irrelevant)} papers are irrelevant")
-        if not relevant:
-            logger.info("No papers are relevant")
-            return analyzed_papers
-        logger.info(f"{len(relevant)} relevant papers filtered successfully")
         return analyzed_papers
 
     def _analyze_papers(self,
@@ -152,15 +142,3 @@ class LLMAnalyzer:
         paper.relevance_reason = data.relevance_reason
         paper.tags_json = json.dumps(valid_keywords, ensure_ascii=False)
         return True
-
-    def _filter_papers(self, papers: Dict[str, Paper]) -> Tuple[Dict[str, Paper], Dict[str, Paper]]:
-        """筛选相关论文"""
-        logger.info(f"Filtering {len(papers)} papers...")
-        relevant_papers = {}
-        irrelevant_papers = {}
-        for doi, paper in papers.items():
-            if paper.relevant_score >= configs.relevance_threshold:
-                relevant_papers[doi] = paper
-            else:
-                irrelevant_papers[doi] = paper
-        return relevant_papers, irrelevant_papers

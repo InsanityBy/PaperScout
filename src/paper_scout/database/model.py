@@ -36,14 +36,16 @@ class Status(enum.IntEnum):
     PENDING_PARSE = 110
     # 分析待处理
     PENDING_ANALYZE = 120
+    # 筛选待处理
+    PENDING_FILTER = 130
     # 上传待处理
-    PENDING_UPLOAD = 130
+    PENDING_UPLOAD = 140
 
     # 正常终止状态
     # 正常终止
     COMPLETED = 200
     # 不相关论文
-    IRRELEVANT = 220
+    IRRELEVANT = 230
 
     # 异常中间状态
     # 获取失败, 仅保留编号占位, 未使用
@@ -55,7 +57,7 @@ class Status(enum.IntEnum):
     # 分析失败
     ANALYZE_FAILED = 320
     # 上传失败
-    UPLOAD_FAILED = 330
+    UPLOAD_FAILED = 340
 
     # 异常终止状态
     # 永久失败, 需要手动处理
