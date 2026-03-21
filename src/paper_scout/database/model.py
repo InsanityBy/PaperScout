@@ -40,6 +40,8 @@ class Status(enum.IntEnum):
     PENDING_FILTER = 130
     # 上传待处理
     PENDING_UPLOAD = 140
+    # 导出待处理
+    PENDING_EXPORT = 150
 
     # 正常终止状态
     # 正常终止
@@ -58,6 +60,8 @@ class Status(enum.IntEnum):
     ANALYZE_FAILED = 320
     # 上传失败
     UPLOAD_FAILED = 340
+    # 导出失败
+    EXPORT_FAILED = 350
 
     # 异常终止状态
     # 永久失败, 需要手动处理
