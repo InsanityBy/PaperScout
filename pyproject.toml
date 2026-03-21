@@ -1,6 +1,6 @@
 [project]
 name = "paper_scout"
-version = "0.2.0"
+version = "0.3.0"
 description = "Smart automated agent for tracking, fetching, and summarizing academic papers."
 readme = "README.md"
 requires-python = ">=3.10"
