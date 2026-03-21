@@ -30,6 +30,9 @@ zotero_batch_limit: 50
 # 分析配置
 relevance_threshold: 7.0  # 相关性阈值, 用于筛选出相关性高的论文
 
+# 导出配置
+export_directory: "./exports"
+
 # 提示词配置
 # 注意: 可以根据需求调整提示词内容
 system_prompt: |-

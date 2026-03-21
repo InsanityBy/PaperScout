@@ -20,6 +20,8 @@ ROOT_DIRECTORY = Path(__file__).resolve().parent.parent.parent.parent
 DEFAULT_LOG_DIRECTORY = ROOT_DIRECTORY / "logs"
 # 默认配置目录
 DEFAULT_CONFIG_DIRECTORY = ROOT_DIRECTORY / "configs"
+# 默认导出目录
+DEFAULT_EXPORT_DIRECTORY = ROOT_DIRECTORY / "exports"
 
 # 伪DOI前缀
 PSEUDO_DOI_PREFIX = "pseudo_doi:"

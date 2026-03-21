@@ -15,9 +15,10 @@ from paper_scout.database.crud import yield_papers, bulk_update_papers, bulk_cre
 from paper_scout.database.database import init_database, SessionLocal
 from paper_scout.database.model import Paper, Status
 from paper_scout.service.analyzer import LLMAnalyzer
-from paper_scout.service.parser import DOIParser
+from paper_scout.service.exporter import MarkdownExporter
 from paper_scout.service.fetcher import DBLPFetcher
 from paper_scout.service.filter import PaperFilter
+from paper_scout.service.parser import DOIParser
 from paper_scout.service.uploader import ZoteroUploader
 
 
@@ -42,22 +43,24 @@ signal.signal(signal.SIGTERM, _signal_handler)
 class Pipeline:
     """工作流程"""
 
-    def __init__(self, start_year: int, end_year: int) -> None:
+    def __init__(self, start_year: int, end_year: int, output_mode: str = "export") -> None:
+        self.output_mode = output_mode
         init_database()
         self.fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
         self.parser = DOIParser()
         self.analyzer = LLMAnalyzer()
-        self.filter = PaperFilter()
+        self.filter = PaperFilter(output_mode=output_mode)
         self.uploader = ZoteroUploader()
+        self.exporter = MarkdownExporter()
 
     def run_all(self) -> None:
         """运行所有流程"""
         logger.info("-" * 50)
         logger.info("Start running all stages...")
-        logger.info("Fetch -> Parse -> Analyze -> Filter -> Upload")
+        logger.info(f"Fetch -> Parse -> Analyze -> Filter -> Output")
         print("-" * 50)
         print("\nStart running all stages...")
-        print("Fetch -> Parse -> Analyze -> Filter -> Upload\n")
+        print(f"Fetch -> Parse -> Analyze -> Filter -> Output\n")
         # 获取论文
         self.run_fetch_stage()
         if shutdown_event.is_set():
@@ -74,8 +77,8 @@ class Pipeline:
         self.run_filter_stage()
         if shutdown_event.is_set():
             return
-        # 上传论文
-        self.run_upload_stage()
+        # 输出论文
+        self.run_output_stage()
         if shutdown_event.is_set():
             return
         logger.info("=" * 50)
@@ -131,27 +134,36 @@ class Pipeline:
         logger.info("[4/5] Start filtering papers...")
         print("-" * 50)
         print("\n[4/5] Start filtering papers\n")
+        current_status_list = []
         if refilter:
-            current_status_list = [Status.PENDING_FILTER, Status.PENDING_UPLOAD, Status.IRRELEVANT]
+            current_status_list.extend(
+                [Status.PENDING_UPLOAD, Status.PENDING_EXPORT, Status.COMPLETED, Status.IRRELEVANT])
             logger.info(f"[*] Refiltering papers")
             print(f"[*] Refiltering papers")
-        else:
-            current_status_list = [Status.PENDING_FILTER]
+        current_status_list.append(Status.PENDING_FILTER)
         for status in current_status_list:
             self.batch_process(current_status=status, process_function=self.filter.filter_all)
         logger.info("[4/5] Finish filtering papers")
         print("[4/5] Finish filtering papers\n")
 
-    def run_upload_stage(self) -> None:
-        """上传论文"""
+    def run_output_stage(self) -> None:
+        """输出论文"""
         logger.info("-" * 50)
-        logger.info("[5/5] Start uploading papers...")
+        logger.info(f"[5/5] Start outputting papers (Mode: {self.output_mode})...")
         print("-" * 50)
-        print("\n[5/5] Start uploading papers...")
-        for status in [Status.PENDING_UPLOAD, Status.UPLOAD_FAILED]:
-            self.batch_process(current_status=status, process_function=self.uploader.upload_all)
-        logger.info("[5/5] Finish uploading papers")
-        print("[5/5] Finish uploading papers\n")
+        print(f"\n[5/5] Start outputting papers (Mode: {self.output_mode})...")
+        if self.output_mode == "upload":
+            current_status_list = [Status.PENDING_UPLOAD, Status.UPLOAD_FAILED]
+            process_function = self.uploader.upload_all
+        elif self.output_mode == "export":
+            current_status_list = [Status.PENDING_EXPORT, Status.EXPORT_FAILED]
+            process_function = self.exporter.export_all
+        else:
+            current_status_list = []
+        for status in current_status_list:
+            self.batch_process(current_status=status, process_function=process_function)
+        logger.info("[5/5] Finish outputting papers")
+        print("[5/5] Finish outputting papers\n")
 
     def batch_process(self,
                       current_status: Status,
