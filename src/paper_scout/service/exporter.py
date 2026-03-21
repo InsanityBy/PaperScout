@@ -99,3 +99,4 @@ class MarkdownExporter:
         safe_title = safe_title.strip(" ._-")
         # 长度截断
         safe_title = safe_title[:150].strip(" ._-")
+        return safe_title
