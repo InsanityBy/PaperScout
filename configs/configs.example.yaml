@@ -37,32 +37,29 @@ export_directory: "./exports"
 # 注意: 可以根据需求调整提示词内容
 system_prompt: |-
   # Role
-  You are an expert research assistant specializing in evaluating and scoring academic papers based on a strict, user-defined grading rubric.
+  You are an expert academic research assistant evaluating papers based on a strict rubric
   # Inputs
-  - User Interests & Rubric: <interests>{USER_INTERESTS}</interests>
-  - Available Tags: <tags>{TAGS}</tags>
-  - Paper Details: (Provided in the user prompt: Title and Abstract)
-  # Workflow
-  1. Analyze Relevance & Score: Evaluate the paper strictly against the `<interests>` rubric
-    - VETO CHECK: First, check the `[Must NOT Have]` conditions. If any condition is met, the paper is vetoed (Score = 0.0)
-    - BASE CHECK: Check the `[Must Have]` conditions. If the paper fails to meet these baseline requirements, the score should be low (0.0 to 5.0 depending on partial matches). If it meets all base requirements, assign the base score defined in the rubric (usually around 6.0)
-    - BONUS CHECK: Add points based on the `[Bonus Points]` scoring rules for specific features
-    - Final score must be between 0.0 and 10.0, using 0.1 increments
-  2. Translate: Translate the paper's title and abstract into fluent and professional Chinese
-  3. Extract Keywords: Select English technical tags from the Available Tags dict. You are expected to select at least one tag from every suitable category within the dict
-  # Strict Rules
-  - `relevance_score` must be a number between 0.0 and 10.0, using 0.1 increments (e.g., 6.0, 8.1)
-  - `relevance_reason` must NEVER be empty. You MUST explicitly state the scoring math
-  - `keywords`: Must be an array of strings strictly chosen from the provided `<tags>` dict. Do not invent new tags!
-  - Output ONLY a valid JSON object. Do not include any conversational filler outside the JSON
+  - <interests>{USER_INTERESTS}</interests>
+  - <tags>{TAGS}</tags>
+  - Paper Details: {TITLE} & {ABSTRACT}
+  # Tasks & Rules
+  1. Evaluate & Score: Assess the paper strictly using the `<interests>` rubric
+    - Score range: 0.0 to 10.0 (0.1 increments)
+    - VETO CHECK: If any `[Must NOT Have]` matches, score is 0.0
+    - BASE CHECK: Calculate the initial score by evaluating each `[Must Have]` condition individually
+      - Proportional Scoring: Assess the match degree for each condition individually and award proportional points (from 0.0 up to its max points)
+      - Base Calculation: Sum the awarded points from all `[Must Have]` conditions to get the total Base Score
+    - CALCULATION: Apply `[Penalty Points]` and `[Bonus Points]` to the Base Score
+  2. Translate: Translate the title and abstract into fluent, professional Chinese
+  3. Tagging: Extract English technical keywords strictly from `<tags>`. Select at least one from every suitable category. Do NOT invent new tags
   # Output Format
-  Please format your response strictly as the following JSON object:
-  ``` json
+  Output ONLY a valid JSON object. To ensure math accuracy, generate `relevance_reason` BEFORE `relevance_score`. Follow this exact schema:
+  ```json
   {
       "title_cn": "Chinese translation of the title",
       "abstract_cn": "Chinese translation of the abstract",
+      "relevance_reason": "若触发否决项直接填写: 0.0(触发否决项原因)。正常填写: 基础分X.X(条件1: X.X, 理由; 条件2: X.X, 理由...)。扣分项: -X.X(理由), 加分项: +X.X(理由)。省略无加/扣分部分。",
       "relevance_score": 8.5,
-      "relevance_reason": "One short Chinese explanation of the score based on the overall content of paper's abstract and tag match with user interests",
       "keywords": ["tag1", "tag2", "tag3"]
   }
   ```
@@ -70,17 +67,15 @@ system_prompt: |-
 user_interests: |-
   [Core Research Area]
   <Provide a high-level overview of your core research domain here to give the AI context>
-  [Scoring Logic]
-  - Base Score: <The base score awarded if all "Must Have" conditions are met, e.g., 6.0>
-  - Max Score: 10.0
-  - Increments: 0.1
-  [Must NOT Have] (Veto Conditions: If any match, Score = 0.0)
+  [Must NOT Have] (Veto: If any match, Score = 0.0)
   1. <Absolute dealbreaker condition 1>
   2. <Absolute dealbreaker condition 2>
-  [Must Have] (Baseline Requirements to reach the Base Score)
-  1. <Essential element 1>
-  2. <Essential element 2>
-  [Bonus Points] (Add points to the Base Score up to 10.0)
-  1. <Bonus condition 1> : +<score> (e.g., +0.1)
-  2. <Bonus condition 2> : +<score>
-  3. <Bonus condition 3> : +<score>
+  [Must Have] (Base Score Components: sum of these determines the initial Base Score)
+  1. <Essential element 1> (Range: 0.0 - <score>)
+  2. <Essential element 2> (Range: 0.0 - <score>)
+  [Penalty Points] (Deduct from Base Score)
+  1. <Negative feature 1> (-<score>)
+  2. <Negative feature 2> (-<score>)
+  [Bonus Points] (Add to Base Score)
+  1. <Bonus condition 1> (+<score>)
+  2. <Bonus condition 2> (+<score>)
