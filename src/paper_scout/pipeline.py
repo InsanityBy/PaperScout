@@ -15,7 +15,7 @@ from paper_scout.database.crud import yield_papers, bulk_update_papers, bulk_cre
 from paper_scout.database.database import init_database, SessionLocal
 from paper_scout.database.model import Paper, Status
 from paper_scout.service.analyzer import LLMAnalyzer
-from paper_scout.service.exporter import MarkdownExporter
+from paper_scout.service.exporter import CSVExporter, MarkdownExporter
 from paper_scout.service.fetcher import DBLPFetcher
 from paper_scout.service.filter import PaperFilter
 from paper_scout.service.parser import DOIParser
@@ -54,6 +54,75 @@ class Pipeline:
         self.filter = PaperFilter(output_mode=output_mode)
         self.uploader = ZoteroUploader()
         self.exporter = MarkdownExporter()
+        self.csv_exporter = CSVExporter()
+
+    def query_papers(self, status: str) -> None:
+        """查询论文"""
+        logger.info("-" * 50)
+        logger.info(f"Query papers with status: {status}")
+        print("-" * 50)
+        print(f"\nQuery papers with status: {status}")
+        # 筛选条件
+        filters = {"year": (self.start_year, self.end_year)}
+        try:
+            valid_status = getattr(Status, status)
+            filters["status"] = valid_status
+        except AttributeError:
+            logger.error(f"Invalid status: {status}")
+            print(f"Invalid status: {status}")
+            return
+        # 查询论文
+        with SessionLocal() as session:
+            count, paper_generator = yield_papers(
+                session=session,
+                filters=filters,
+                chunk_size=configs.chunk_size
+            )
+            if count == 0:
+                logger.info(f"[*] No papers with status {status}")
+                print(f"[*] No papers with status {status}")
+                return
+            logger.info(f"[*] Found {count} papers with conditions "
+                        f"(Year: {self.start_year} - {self.end_year}, Status: {status})")
+            print(f"[*] Found {count} papers with conditions "
+                  f"(Year: {self.start_year} - {self.end_year}, Status: {status})")
+            # 用户交互确认
+            logger.debug("User confirm to export papers")
+            confirm = input("    Do you want to export these papers? [y/N]: ").strip().lower()
+            logger.debug(f"User input: {confirm}")
+            if confirm != 'y':
+                logger.info("Export cancelled")
+                print("    Export cancelled")
+                return
+            # 获取文件名
+            logger.debug("User input filename")
+            filename = input(
+                "    Enter filename (without extension, leave empty for default): ").strip()
+            logger.debug(f"User input: {filename}")
+            if not filename:
+                filename = f"export_{status}_{self.start_year}_{self.end_year}"
+            if not filename.lower().strip().endswith(".csv"):
+                filename += ".csv"
+            logger.info(f"[*] Exporting to {configs.export_directory / filename}...")
+            print(f"[*] Exporting to {configs.export_directory / filename}...")
+            # 写入CSV文件
+            with tqdm(total=count, desc="    Exporting to CSV", unit=" paper", leave=False) as pbar:
+                for paper_chunk in paper_generator:
+                    # 检查是否收到终止信号
+                    if shutdown_event.is_set():
+                        logger.warning("Received termination signal, stopping export")
+                        break
+                    try:
+                        self.csv_exporter.export_all(paper_chunk, filename)
+                        logger.info(f"{len(paper_chunk)} papers exported successfully")
+                        pbar.update(len(paper_chunk))
+                    except Exception as e:
+                        logger.error(f"Failed to export paper chunk")
+                        logger.debug(f"Exception: {e}")
+                        pbar.update(len(paper_chunk))
+                        continue
+            logger.info(f"Exported {count} papers successfully")
+            print(f"[*] Exported {count} papers successfully")
 
     def run_all(self) -> None:
         """运行所有流程"""
@@ -174,11 +243,10 @@ class Pipeline:
         """处理指定状态的论文"""
         with SessionLocal() as session:
             # 获取所有状态为current_status的论文
-            chunk_size = configs.chunk_size
             count, paper_generator = yield_papers(
                 session=session,
                 filters={"status": current_status, "year": (self.start_year, self.end_year)},
-                chunk_size=chunk_size
+                chunk_size=configs.chunk_size
             )
             if count == 0:
                 logger.info(f"[*] No papers with status {current_status.name} to process")

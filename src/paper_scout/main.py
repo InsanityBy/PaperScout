@@ -9,6 +9,7 @@ from pathlib import Path
 
 from paper_scout.core.constant import DEFAULT_PACKAGE_NAME
 from paper_scout.core.logger import set_global_logger
+from paper_scout.database.model import Status
 from paper_scout.pipeline import Pipeline
 
 
@@ -28,6 +29,9 @@ def main():
                        help="Run complete workflow")
     group.add_argument("--stage", choices=["fetch", "parse", "analyze", "filter", "output"],
                        help="Run specified stage")
+    group.add_argument("--query-status", "-q", type=str.upper, default=Status.COMPLETED.name,
+                       choices=[status.name for status in Status],
+                       help=f"Query papers by status and export to CSV (default: {Status.COMPLETED.name})")
     parser.add_argument("--output-mode", "-o", type=str.lower, default="export",
                         choices=["none", "export", "upload"],
                         help="Select output mode after filtering (default: export)")
@@ -53,6 +57,8 @@ def main():
     try:
         if args.run_all:
             pipeline.run_all()
+        elif args.query_status:
+            pipeline.query_papers(status=args.query_status)
         elif args.stage == "fetch":
             pipeline.run_fetch_stage()
         elif args.stage == "parse":
