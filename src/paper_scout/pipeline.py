@@ -44,6 +44,8 @@ class Pipeline:
     """工作流程"""
 
     def __init__(self, start_year: int, end_year: int, output_mode: str = "export") -> None:
+        self.start_year = start_year
+        self.end_year = end_year
         self.output_mode = output_mode
         init_database()
         self.fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
@@ -175,7 +177,7 @@ class Pipeline:
             chunk_size = configs.chunk_size
             count, paper_generator = yield_papers(
                 session=session,
-                filters={"status": current_status},
+                filters={"status": current_status, "year": (self.start_year, self.end_year)},
                 chunk_size=chunk_size
             )
             if count == 0:
