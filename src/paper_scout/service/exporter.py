@@ -2,6 +2,7 @@
 # This file is licensed under the MIT License
 # See the LICENSE file in the project root for more information
 
+import csv
 import json
 import logging
 import re
@@ -100,3 +101,51 @@ class MarkdownExporter:
         # 长度截断
         safe_title = safe_title[:150].strip(" ._-")
         return safe_title
+
+
+class CSVExporter:
+    """CSV文件导出器"""
+
+    def __init__(self) -> None:
+        self.export_directory = configs.export_directory
+        self.export_directory.mkdir(parents=True, exist_ok=True)
+
+    def export_all(self, papers: List[Paper], filename: str) -> None:
+        """批量导出论文"""
+        if not papers:
+            logger.warning("Papers not provided to export")
+            return
+        logger.info(f"Exporting {len(papers)} papers to CSV file...")
+        # 构建CSV文件头
+        headers = [
+            "DOI", "Year", "Venue Type", "Venue", "Title", "Abstract",
+            "Title (CN)", "Abstract (CN)", "Relevance Score", "Relevance Reason",
+            "Tags", "Status", "Retry Count", "Create Time", "Update Time"
+        ]
+        # 检查CSV文件是否已经存在
+        file_path = self.export_directory / filename
+        file_exists = file_path.is_file()
+        # 写入CSV文件
+        with open(file_path, mode="a", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            # 新文件写入文件头
+            if not file_exists:
+                writer.writerow(headers)
+            for paper in papers:
+                writer.writerow([
+                    paper.doi,
+                    paper.year,
+                    paper.venue_type.value if paper.venue_type else "",
+                    paper.venue_name,
+                    paper.title,
+                    paper.abstract,
+                    paper.title_cn,
+                    paper.abstract_cn,
+                    paper.relevance_score,
+                    paper.relevance_reason,
+                    paper.tags_json,
+                    paper.status.name if paper.status else "",
+                    paper.retry_count,
+                    paper.create_time,
+                    paper.update_time
+                ])

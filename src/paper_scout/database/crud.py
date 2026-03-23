@@ -65,7 +65,7 @@ def bulk_create_papers(
 
 def yield_papers(
     session: Session,
-    filters: Dict[str, int | Status | str | VenueType],
+    filters: Dict[str, int | List | Status | str | Tuple | VenueType],
     chunk_size: int = DEFAULT_CHUNK_SIZE
 ) -> Tuple[int, Iterator[List[Paper]]]:
     """流式查询论文"""
@@ -74,13 +74,30 @@ def yield_papers(
     query = session.query(Paper)
     # 应用过滤条件
     if filters:
-        # 筛选有效过滤条件
-        valid_filters = {k: v for k, v in filters.items() if hasattr(Paper, k)}
-        if valid_filters:
-            query = query.filter_by(**valid_filters)
-            logger.debug(f"Filters: {valid_filters}")
-        else:
-            logger.debug("Filters not valid, querying all papers")
+        # 遍历过滤条件
+        for key, value in filters.items():
+            # 跳过无效的过滤键
+            if not hasattr(Paper, key) or value is None:
+                logger.warning(f"Invalid filter key ignored: {key}")
+                continue
+            # 获取列对象
+            column = getattr(Paper, key)
+            if isinstance(value, list):
+                # 列表解析为IN查询
+                query = query.filter(column.in_(value))
+                logger.debug(f"Filter added: {key} IN {value}")
+            elif isinstance(value, tuple) and len(value) == 2:
+                # 元组解析为范围查询[min, max]
+                min_value, max_value = value
+                if min_value is not None:
+                    query = query.filter(column >= min_value)
+                if max_value is not None:
+                    query = query.filter(column <= max_value)
+                logger.debug(f"Filter added: {key} BETWEEN {min_value} AND {max_value}")
+            else:
+                # 其他解析为精确匹配
+                query = query.filter(column == value)
+                logger.debug(f"Filter added: {key} == {value}")
     else:
         logger.debug("Filters not provided, querying all papers")
     # 统计数量

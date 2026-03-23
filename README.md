@@ -16,6 +16,7 @@
 - **Filter**: Independently evaluate and filter successfully analyzed papers based on a customizable threshold. Supports re-evaluating previously filtered papers when run individually.
 - **Output**: Flexible output options after filtering. Support uploading directly to specified Zotero collections, exporting as local Markdown files, or finishing without any output.
 - **Resilience**: Track the status of each paper in a local SQLite database (`PENDING_FETCH`, `PENDING_PARSE`, etc.) to support safe batch processing and resuming from interruptions.
+- **Query**: Interactively query papers by processing status and time range, then append or export the results to a structured CSV file.
 
 ### Prerequisites
 
@@ -94,16 +95,24 @@ paper_scout -s 2024 -e 2025 --stage analyze
 paper_scout -s 2024 -e 2025 --stage filter
 # Only run the output stage (upload to Zotero, export to markdown, or do nothing based on output-mode)
 paper_scout -s 2024 -e 2025 --stage output
+# Query papers by status (e.g., COMPLETED) and export to a CSV file
+paper_scout -s 2024 -e 2025 --query COMPLETED
+# Or shorthand:
+paper_scout -s 2024 -e 2025 -q COMPLETED
 ```
 
 **Global Options**:
 
-- `--output-mode, -o`: Output mode after filtering (Choices: `none`, `upload`, `export`. Default: `export`).
-    - `none`: Finish process without uploading or exporting.
-    - `upload`: Upload relevant papers directly into specified Zotero collections.
-    - `export`: Export relevant papers as formatted local Markdown files.
-- `--log-directory`: Directory to store log files (Default: `logs`).
-- `--log-level`: Logging level (Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+- **Required Arguments (Apply to all commands)**:
+    - `--start-year, -s`: Start year for processing papers.
+    - `--end-year, -e`: End year for processing papers.
+- **Optional Arguments**:
+    - `--output-mode, -o`: Output mode after filtering (Choices: `none`, `upload`, `export`. Default: `export`).
+        - `none`: Finish process without uploading or exporting.
+        - `upload`: Upload relevant papers directly into specified Zotero collections.
+        - `export`: Export relevant papers as formatted local Markdown files.
+    - `--log-directory`: Directory to store log files (Default: `logs`).
+    - `--log-level`: Logging level (Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 
 ### Project Structure
 
@@ -114,7 +123,7 @@ paper_scout -s 2024 -e 2025 --stage output
 │   ├── tags.yaml             # LLM tags (from .example.yaml)
 │   └── venues.yaml           # DBLP targets (from .example.yaml)
 ├── db/                       # SQLite database storage (generated automatically)
-├── exports/                  # Local Markdown files (generated automatically)
+├── exports/                  # Local CSV / Markdown files (generated automatically)
 ├── logs/                     # Log files (generated automatically)
 ├── src/
 │   └── paper_scout/          # Main package directory
@@ -191,6 +200,7 @@ This project is licensed under the [MIT License](https://mit-license.org). See t
 - **筛选 (Filter)**: 独立阶段，可随时根据配置文件中的阈值，对分析成功的论文进行评估和归类。单独运行该阶段时，支持对过往已筛选的论文重新根据新阈值进行评估。
 - **输出 (Output)**: 提供灵活的输出选项。支持自动上传至 Zotero 库、导出为本地 Markdown 文件，或在分析结束后直接标记完成不进行输出。
 - **容错恢复 (Resilience)**: 在本地 SQLite 数据库中跟踪每篇论文的处理状态（如 `PENDING_FETCH`, `PENDING_PARSE` 等），支持安全的批量处理和断点续传。
+- **查询 (Query)**: 支持按处理状态和时间范围交互式查询论文，并将结果追加或导出为结构化的 CSV 文件。
 
 ### 前置要求
 
@@ -269,16 +279,24 @@ paper_scout -s 2024 -e 2025 --stage analyze
 paper_scout -s 2024 -e 2025 --stage filter
 # 仅执行输出阶段(根据 output-mode 上传至 Zotero, 导出 Markdown 或无动作)
 paper_scout -s 2024 -e 2025 --stage output
+# 按状态(如 COMPLETED)查询论文并导出为 CSV 文件
+paper_scout -s 2024 -e 2025 --query COMPLETED
+# 或使用简写参数:
+paper_scout -s 2024 -e 2025 -q COMPLETED
 ```
 
 **全局选项**：
 
-- `--output-mode, -o`: 筛选后的输出模式（可选：`none`, `upload`, `export`。默认：`export`）。
-    - `none`: 仅完成分析和筛选，不进行任何导出或上传。
-    - `upload`: 将筛选后的论文上传至指定的 Zotero 库。
-    - `export`: 将筛选后的论文保存为格式化的本地 Markdown 文件。
-- `--log-directory`: 日志存储目录（默认：`logs`）。
-- `--log-level`: 日志记录级别（可选：`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`）。
+- **必选参数（适用于所有命令）**：
+    - `--start-year, -s`: 处理论文的起始年份。
+    - `--end-year, -e`: 处理论文的结束年份。
+- **可选参数**：
+    - `--output-mode, -o`: 筛选后的输出模式（可选：`none`, `upload`, `export`。默认：`export`）。
+        - `none`: 仅完成分析和筛选，不进行任何导出或上传。
+        - `upload`: 将筛选后的论文上传至指定的 Zotero 库。
+        - `export`: 将筛选后的论文保存为格式化的本地 Markdown 文件。
+    - `--log-directory`: 日志存储目录（默认：`logs`）。
+    - `--log-level`: 日志记录级别（可选：`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`）。
 
 ### 项目结构
 
@@ -289,7 +307,7 @@ paper_scout -s 2024 -e 2025 --stage output
 │   ├── tags.yaml             # LLM 标签 (由 .example.yaml 复制)
 │   └── venues.yaml           # DBLP 目标链接 (由 .example.yaml 复制)
 ├── db/                       # SQLite 数据库存储目录 (自动生成)
-├── exports/                  # 本地 Markdown 文件目录 (自动生成)
+├── exports/                  # 本地 CSV / Markdown 文件目录 (自动生成)
 ├── logs/                     # 日志文件目录 (自动生成)
 ├── src/
 │   └── paper_scout/          # 主包目录
