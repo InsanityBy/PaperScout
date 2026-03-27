@@ -146,6 +146,6 @@ class CSVExporter:
                     paper.tags_json,
                     paper.status.name if paper.status else "",
                     paper.retry_count,
-                    paper.create_time,
-                    paper.update_time
+                    paper.created_at,
+                    paper.updated_at
                 ])
