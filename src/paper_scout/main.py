@@ -29,9 +29,9 @@ def main():
                        help="Run complete workflow")
     group.add_argument("--stage", choices=["fetch", "parse", "analyze", "filter", "output"],
                        help="Run specified stage")
-    group.add_argument("--query-status", "-q", type=str.upper, default=Status.COMPLETED.name,
+    group.add_argument("--query-status", "-q", type=str.upper,
                        choices=[status.name for status in Status],
-                       help=f"Query papers by status and export to CSV (default: {Status.COMPLETED.name})")
+                       help="Query papers by status and export to CSV")
     parser.add_argument("--output-mode", "-o", type=str.lower, default="export",
                         choices=["none", "export", "upload"],
                         help="Select output mode after filtering (default: export)")
