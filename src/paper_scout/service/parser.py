@@ -18,6 +18,7 @@ from paper_scout.core.constant import (
     OA_BATCH_RATE_LIMIT,
     OA_PERIOD,
     OA_SINGLE_RATE_LIMIT,
+    PSEUDO_DOI_PREFIX,
     S2_BATCH_RATE_LIMIT,
     S2_PERIOD,
     S2_SINGLE_RATE_LIMIT
@@ -40,6 +41,18 @@ class DOIParser:
         else:
             self.s2_session = self.common_session
 
+    def __enter__(self) -> "DOIParser":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """关闭HTTP会话资源"""
+        self.common_session.close()
+        if self.s2_session is not self.common_session:
+            self.s2_session.close()
+
     def parse_all(self, papers: List[Paper]) -> Dict[Status, List[Paper]]:
         """批量解析获取论文详情"""
         if not papers:
@@ -51,36 +64,83 @@ class DOIParser:
             Status.PARSE_FAILED: [],
             Status.DOI_INVALID: []
         }
-        # 使用Crossref验证DOI
-        papers_dict = {paper.doi: paper for paper in papers}
-        cr_verified, cr_invalid, cr_failed = self._verify_by_cr(papers=papers_dict)
-        if cr_invalid:
-            parsed_papers[Status.DOI_INVALID].extend(cr_invalid.values())
-            logger.warning(f"{len(cr_invalid)} papers not passed Crossref verification")
-        if cr_failed:
-            parsed_papers[Status.PARSE_FAILED].extend(cr_failed.values())
-            logger.warning(f"Failed to verify {len(cr_failed)} papers using Crossref")
-        if not cr_verified:
-            logger.error(f"No papers passed Crossref verification")
-            return parsed_papers
-        logger.info(f"{len(cr_verified)} papers passed Crossref verification successfully")
-        # 优先使用Semantic Scholar获取论文详情
-        s2_parsed, s2_failed = self._parse_by_s2(papers=cr_verified)
-        parsed_papers[Status.PENDING_ANALYZE].extend(s2_parsed.values())
-        # 使用OpenAlex获取失败论文的详情
-        if s2_failed:
-            logger.warning(f"Failed to parse {len(s2_failed)} papers using Semantic Scholar")
-            logger.info(f"Retrying to parse {len(s2_failed)} papers using OpenAlex...")
-            oa_parsed, oa_failed = self._parse_by_oa(papers=s2_failed)
-            parsed_papers[Status.PENDING_ANALYZE].extend(oa_parsed.values())
-            if oa_failed:
-                parsed_papers[Status.PARSE_FAILED].extend(oa_failed.values())
-                logger.warning(f"Failed to parse {len(oa_failed)} papers using OpenAlex")
+        # 拆分真实DOI和标题生成伪DOI的论文
+        real_doi_papers = {}
+        pseudo_doi_papers = {}
+        for paper in papers:
+            if paper.doi.startswith(PSEUDO_DOI_PREFIX):
+                pseudo_doi_papers[paper.doi] = paper
+            else:
+                real_doi_papers[paper.doi] = paper
+        # 处理真实DOI的论文
+        if real_doi_papers:
+            logger.info(f"Parsing details for {len(real_doi_papers)} papers with real DOI...")
+            # 使用Crossref验证DOI
+            cr_verified, cr_invalid, cr_failed = self._verify_by_cr(papers=real_doi_papers)
+            if cr_invalid:
+                parsed_papers[Status.DOI_INVALID].extend(cr_invalid.values())
+                logger.warning(f"{len(cr_invalid)} papers not passed Crossref verification")
+            if cr_failed:
+                parsed_papers[Status.PARSE_FAILED].extend(cr_failed.values())
+                logger.warning(f"Failed to verify {len(cr_failed)} papers using Crossref")
+            if cr_verified:
+                logger.info(f"{len(cr_verified)} papers passed Crossref verification successfully")
+                parsed, failed = self._execute_parse_pipeline(
+                    papers=cr_verified,
+                    primary_name="Semantic Scholar",
+                    fallback_name="OpenAlex",
+                    primary_func=self._parse_by_s2,
+                    fallback_func=self._parse_by_oa
+                )
+                parsed_papers[Status.PENDING_ANALYZE].extend(parsed)
+                parsed_papers[Status.PARSE_FAILED].extend(failed)
+            else:
+                logger.error(f"No papers passed Crossref verification")
+        # 处理标题生成伪DOI的论文
+        if pseudo_doi_papers:
+            logger.info(
+                f"Fallback to title search for {len(pseudo_doi_papers)} papers only with title...")
+            parsed, failed = self._execute_parse_pipeline(
+                papers=pseudo_doi_papers,
+                primary_name="Semantic Scholar",
+                fallback_name="OpenAlex",
+                primary_func=self._parse_by_s2_title,
+                fallback_func=self._parse_by_oa_title
+            )
+            parsed_papers[Status.PENDING_ANALYZE].extend(parsed)
+            parsed_papers[Status.PARSE_FAILED].extend(failed)
         if not parsed_papers[Status.PENDING_ANALYZE]:
             logger.error(f"Failed to parse any papers")
             return parsed_papers
         logger.info(f"{len(parsed_papers[Status.PENDING_ANALYZE])} papers parsed successfully")
         return parsed_papers
+
+    def _execute_parse_pipeline(self,
+                                papers: Dict[str, Paper],
+                                primary_name: str,
+                                fallback_name: str,
+                                primary_func: Callable[[Dict[str, Paper]], Tuple[Dict[str, Paper], Dict[str, Paper]]],
+                                fallback_func: Callable[[Dict[str, Paper]],
+                                                        Tuple[Dict[str, Paper], Dict[str, Paper]]]
+                                ) -> Tuple[List[Paper], List[Paper]]:
+        """执行解析流水线：主数据源 -> 备用数据源"""
+        parsed_list = []
+        failed_list = []
+        # 优先使用主数据源解析
+        primary_parsed, primary_failed = primary_func(papers=papers)
+        parsed_list.extend(primary_parsed.values())
+        # 处理主数据源解析失败的论文
+        if primary_failed:
+            logger.warning(f"Failed to parse {len(primary_failed)} papers using {primary_name}")
+            logger.info(f"Retrying to parse {len(primary_failed)} papers using {fallback_name}...")
+            fallback_parsed, fallback_failed = fallback_func(papers=primary_failed)
+            parsed_list.extend(fallback_parsed.values())
+            # 处理备用数据源解析失败的论文
+            if fallback_failed:
+                failed_list.extend(fallback_failed.values())
+                logger.warning(
+                    f"Failed to parse {len(fallback_failed)} papers using {fallback_name}")
+        return parsed_list, failed_list
 
     def _verify_by_cr(self,
                       papers: Dict[str, Paper]
@@ -133,13 +193,29 @@ class DOIParser:
             single_func=self._single_parse_by_oa
         )
 
+    def _parse_by_s2_title(self, papers: Dict[str, Paper]) -> Tuple[Dict[str, Paper], Dict[str, Paper]]:
+        """使用Semantic Scholar基于标题解析获取论文详情"""
+        return self._parse_title_common(
+            papers=papers,
+            source_name="Semantic Scholar(Title Search)",
+            single_func=self._single_parse_by_s2_title
+        )
+
+    def _parse_by_oa_title(self, papers: Dict[str, Paper]) -> Tuple[Dict[str, Paper], Dict[str, Paper]]:
+        """使用OpenAlex基于标题解析获取论文详情"""
+        return self._parse_title_common(
+            papers=papers,
+            source_name="OpenAlex(Title Search)",
+            single_func=self._single_parse_by_oa_title
+        )
+
     def _parse_common(self,
                       papers: Dict[str, Paper],
                       source_name: str,
                       has_api_key: bool,
                       batch_limit: int,
-                      batch_func: Callable[[List[str]], Dict[str, Paper]],
-                      single_func: Callable[[str], Paper]
+                      batch_func: Callable[[List[str]], Dict[str, Dict[str, str]]],
+                      single_func: Callable[[str], Dict[str, str]]
                       ) -> Tuple[Dict[str, Paper], Dict[str, Paper]]:
         """通用解析方法: 批量请求 -> 降级单条并发"""
         logger.info(f"Parsing details for {len(papers)} papers using {source_name}...")
@@ -194,6 +270,35 @@ class DOIParser:
                         logger.debug(f"Exception: {e}")
         return parsed_papers, failed_papers
 
+    def _parse_title_common(self,
+                            papers: Dict[str, Paper],
+                            source_name: str,
+                            single_func: Callable[[str], Dict[str, str]]
+                            ) -> Tuple[Dict[str, Paper], Dict[str, Paper]]:
+        """通用标题解析方法: 单条并发"""
+        logger.info(f"Parsing details for {len(papers)} papers using {source_name}...")
+        parsed_papers = {}
+        failed_papers = {}
+        with ThreadPoolExecutor(max_workers=configs.max_concurrent_workers) as executor:
+            future_fetch = {
+                executor.submit(single_func, paper.title): doi
+                for doi, paper in papers.items()
+            }
+            for future in as_completed(future_fetch):
+                doi = future_fetch[future]
+                paper = papers[doi]
+                try:
+                    result = future.result()
+                    if self._update_paper(paper=paper, data=result):
+                        parsed_papers[doi] = paper
+                    else:
+                        failed_papers[doi] = paper
+                except Exception as e:
+                    failed_papers[doi] = paper
+                    logger.error(f"Failed to parse details for paper with title: {paper.title}")
+                    logger.debug(f"Exception: {e}")
+        return parsed_papers, failed_papers
+
     @retry(stop=stop_after_attempt(configs.max_retries),
            wait=wait_exponential(multiplier=2, min=2, max=configs.request_timeout))
     @sleep_and_retry
@@ -227,38 +332,7 @@ class DOIParser:
         data = {}
         results = response.json()
         for doi, result in zip(dois, results):
-            if result:
-                data[doi] = {
-                    "title": result.get("title") or "",
-                    "abstract": result.get("abstract") or ""
-                }
-            else:
-                data[doi] = {
-                    "title": "",
-                    "abstract": ""
-                }
-        return data
-
-    @retry(stop=stop_after_attempt(configs.max_retries),
-           wait=wait_exponential(multiplier=2, min=2, max=configs.request_timeout))
-    @sleep_and_retry
-    @limits(calls=S2_SINGLE_RATE_LIMIT, period=S2_PERIOD)
-    def _single_parse_by_s2(self, doi: str) -> Dict[str, str]:
-        """使用Semantic Scholar单条查询接口解析获取论文详情"""
-        base_url = configs.s2_base_url
-        full_url = urljoin(base_url, f"graph/v1/paper/{quote(doi)}")
-        response = self.common_session.get(
-            full_url,
-            params={"fields": "title,abstract"},
-            timeout=configs.request_timeout
-        )
-        response.raise_for_status()
-        # 提取数据
-        result = response.json()
-        data = {
-            "title": result.get("title") or "",
-            "abstract": result.get("abstract") or ""
-        }
+            data[doi] = self._extract_s2_data(result=result)
         return data
 
     @retry(stop=stop_after_attempt(configs.max_retries),
@@ -282,17 +356,31 @@ class DOIParser:
         )
         response.raise_for_status()
         # 提取数据, 忽略DOI大小写
-        data = {doi.lower(): {"title": "", "abstract": ""} for doi in dois}
+        data = {doi: {"title": "", "abstract": ""} for doi in dois}
         dois_mapping = {doi.lower(): doi for doi in dois}
         results = response.json().get("results", [])
         for result in results:
             doi = result.get("doi", "").replace("https://doi.org/", "").lower()
-            data[dois_mapping.get(doi, doi)] = {
-                "title": result.get("title") or "",
-                "abstract": self._reconstruct_abstract(
-                    text=result.get("abstract_inverted_index") or {})
-            }
+            data[dois_mapping.get(doi, doi)] = self._extract_oa_data(result=result)
         return data
+
+    @retry(stop=stop_after_attempt(configs.max_retries),
+           wait=wait_exponential(multiplier=2, min=2, max=configs.request_timeout))
+    @sleep_and_retry
+    @limits(calls=S2_SINGLE_RATE_LIMIT, period=S2_PERIOD)
+    def _single_parse_by_s2(self, doi: str) -> Dict[str, str]:
+        """使用Semantic Scholar单条查询接口解析获取论文详情"""
+        base_url = configs.s2_base_url
+        full_url = urljoin(base_url, f"graph/v1/paper/{quote(doi)}")
+        response = self.common_session.get(
+            full_url,
+            params={"fields": "title,abstract"},
+            timeout=configs.request_timeout
+        )
+        response.raise_for_status()
+        # 提取数据
+        result = response.json()
+        return self._extract_s2_data(result=result)
 
     @retry(stop=stop_after_attempt(configs.max_retries),
            wait=wait_exponential(multiplier=2, min=2, max=configs.request_timeout))
@@ -305,33 +393,103 @@ class DOIParser:
         full_url = f"{full_url}/https://doi.org/{quote(doi)}"
         response = self.common_session.get(
             full_url,
-            params={"select": "title,abstract_inverted_index"},
+            params={
+                "per_page": 1,
+                "select": "title,abstract_inverted_index"
+            },
             timeout=configs.request_timeout
         )
         response.raise_for_status()
         # 提取数据
         result = response.json()
-        data = {
-            "title": result.get("title") or "",
-            "abstract": self._reconstruct_abstract(
-                text=result.get("abstract_inverted_index") or {})
-        }
-        return data
+        return self._extract_oa_data(result=result)
 
-    def _update_paper(self, paper: Paper, data: Dict[str, str]) -> bool:
+    @retry(stop=stop_after_attempt(configs.max_retries),
+           wait=wait_exponential(multiplier=2, min=2, max=configs.request_timeout))
+    @sleep_and_retry
+    @limits(calls=S2_SINGLE_RATE_LIMIT, period=S2_PERIOD)
+    def _single_parse_by_s2_title(self, title: str) -> Dict[str, str]:
+        """使用Semantic Scholar单条查询接口基于标题解析获取论文详情"""
+        base_url = configs.s2_base_url
+        full_url = urljoin(base_url, "graph/v1/paper/search/match")
+        response = self.common_session.get(
+            full_url,
+            params={
+                "query": f"{title}",
+                "fields": "title,abstract"
+            },
+            timeout=configs.request_timeout
+        )
+        response.raise_for_status()
+        # 提取数据
+        result = response.json().get("data", [])
+        return self._extract_s2_data(result=result[0] if result else {})
+
+    @retry(stop=stop_after_attempt(configs.max_retries),
+           wait=wait_exponential(multiplier=2, min=2, max=configs.request_timeout))
+    @sleep_and_retry
+    @limits(calls=OA_SINGLE_RATE_LIMIT, period=OA_PERIOD)
+    def _single_parse_by_oa_title(self, title: str) -> Dict[str, str]:
+        """使用OpenAlex单条查询接口基于标题解析获取论文详情"""
+        base_url = configs.oa_base_url
+        full_url = urljoin(base_url, "works")
+        response = self.common_session.get(
+            full_url,
+            params={
+                "search": f'"{title}"',
+                "per_page": 1,
+                "select": "title,abstract_inverted_index"
+            },
+            timeout=configs.request_timeout
+        )
+        response.raise_for_status()
+        # 提取数据
+        result = response.json().get("results", [])
+        return self._extract_oa_data(result=result[0] if result else {})
+
+    @staticmethod
+    def _extract_s2_data(result: Dict) -> Dict[str, str]:
+        """提取Semantic Scholar数据"""
+        if not result:
+            return {"title": "", "abstract": ""}
+        return {
+            "title": result.get("title") or "",
+            "abstract": result.get("abstract") or ""
+        }
+
+    @staticmethod
+    def _extract_oa_data(result: Dict) -> Dict[str, str]:
+        """提取OpenAlex数据"""
+        if not result:
+            return {"title": "", "abstract": ""}
+        return {
+            "title": result.get("title") or "",
+            "abstract": DOIParser._reconstruct_abstract(text=result.get("abstract_inverted_index") or {})
+        }
+
+    @staticmethod
+    def _update_paper(paper: Paper, data: Dict[str, str]) -> bool:
         """更新论文"""
         if not data:
             logger.warning(f"Empty data for paper with DOI: {paper.doi}")
             return False
+        # 更新标题
         title = data.get("title", "")
-        abstract = self._clean_abstract(text=data.get("abstract", ""))
-        if title and abstract:
+        if title:
             paper.title = title
-            paper.abstract = abstract
-            return True
+            title_updated = True
         else:
-            logger.warning(f"Title or abstract missing for paper with DOI: {paper.doi}")
-            return False
+            title_updated = False
+            logger.warning(f"Title missing for paper with DOI: {paper.doi}")
+        # 更新摘要
+        abstract = DOIParser._clean_abstract(text=data.get("abstract", ""))
+        if abstract:
+            paper.abstract = abstract
+            abstract_updated = True
+        else:
+            abstract_updated = False
+            logger.warning(f"Abstract missing for paper with DOI: {paper.doi}")
+        return title_updated and abstract_updated
 
     @staticmethod
     def _clean_abstract(text: str) -> str:
@@ -341,17 +499,14 @@ class DOIParser:
         return " ".join(re.sub(r"<[^>]+>", "", text).split())
 
     @staticmethod
-    def _reconstruct_abstract(text: dict) -> str:
+    def _reconstruct_abstract(text: Dict[str, List[int]]) -> str:
         """重构摘要"""
         if not text:
             return ""
-        word_positions = []
-        for word, positions in text.items():
-            for position in positions:
-                word_positions.append((position, word))
+        word_positions = [
+            (position, word)
+            for word, positions in text.items()
+            for position in positions
+        ]
         word_positions.sort(key=lambda x: x[0])
-        return " ".join([word for _, word in word_positions])
-
-    def __del__(self) -> None:
-        self.common_session.close()
-        self.s2_session.close()
+        return " ".join(word for _, word in word_positions)

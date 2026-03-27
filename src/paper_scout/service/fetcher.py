@@ -23,6 +23,9 @@ from paper_scout.database.model import Status, VenueType
 # 设置日志记录
 logger = logging.getLogger(__name__)
 
+# 预编译DOI正则表达式
+DOI_PATTERN = re.compile(r"10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+")
+
 
 class DBLPFetcher:
     """DBLP论文获取器"""
@@ -164,16 +167,22 @@ class DBLPFetcher:
                 logger.warning(f"Empty title: {paper}, using default title: {title}")
             # 提取DOI
             doi_tag = paper.find("ee")
+            doi = ""
             if doi_tag:
-                doi = doi_tag.get_text(strip=True).replace("https://doi.org/", "").strip()
+                doi_text = doi_tag.get_text(strip=True)
+                doi_matched = DOI_PATTERN.search(doi_text)
+                if doi_matched:
+                    doi = doi_matched.group(0)
+            # 处理DOI
+            if doi:
                 status = Status.PENDING_PARSE
-            elif title == "Unknown Title":
+            elif title != "Unknown Title":  # 没有DOI, 有标题
+                doi = self._generate_pseudo_doi(title=title)
+                status = Status.PENDING_PARSE
+                logger.warning(f"Empty DOI: {paper}, using pseudo DOI: {doi}")
+            else:
                 logger.warning(f"Empty title and DOI: {paper}, skipped")
                 continue
-            else:
-                doi = self._generate_pseudo_doi(title=title)
-                status = Status.MISSING_DOI
-                logger.warning(f"Empty DOI: {paper}, using pseudo DOI: {doi}")
             # 保存新论文
             papers_data.append({
                 "doi": doi,
