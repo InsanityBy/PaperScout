@@ -11,6 +11,9 @@ max_retries: 3
 request_timeout: 30
 
 # 请求链接配置
+# arXiv: 获取论文DOI和论文详情
+arxiv_base_url: "http://export.arxiv.org"
+arxiv_batch_limit: 200
 # DBLP: 获取论文DOI
 dblp_base_url: "https://dblp.org"
 # Crossref: 验证论文DOI
@@ -26,6 +29,9 @@ llm_base_url: "https://api.deepseek.com"
 llm_model: "deepseek-chat"
 # Zotero: 上传论文
 zotero_batch_limit: 50
+
+# 日期限制
+arxiv_max_lookback_days: 30
 
 # 分析配置
 relevance_threshold: 7.0  # 相关性阈值, 用于筛选出相关性高的论文

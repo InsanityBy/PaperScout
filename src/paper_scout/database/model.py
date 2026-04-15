@@ -24,6 +24,8 @@ class VenueType(str, enum.Enum):
     CONFERENCE = "CONFERENCE"
     # 期刊
     JOURNAL = "JOURNAL"
+    # arXiv
+    ARXIV = "ARXIV"
 
 
 class Status(enum.IntEnum):
