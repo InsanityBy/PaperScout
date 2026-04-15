@@ -16,7 +16,7 @@ from paper_scout.database.database import init_database, SessionLocal
 from paper_scout.database.model import Paper, Status
 from paper_scout.service.analyzer import LLMAnalyzer
 from paper_scout.service.exporter import CSVExporter, MarkdownExporter
-from paper_scout.service.fetcher import DBLPFetcher
+from paper_scout.service.fetcher import ArxivFetcher, DBLPFetcher, merged_fetcher
 from paper_scout.service.filter import PaperFilter
 from paper_scout.service.parser import DOIParser
 from paper_scout.service.uploader import ZoteroUploader
@@ -48,7 +48,8 @@ class Pipeline:
         self.end_year = end_year
         self.output_mode = output_mode
         init_database()
-        self.fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
+        self.arxiv_fetcher = ArxivFetcher(start_year=start_year, end_year=end_year)
+        self.dblp_fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
         self.parser = DOIParser()
         self.analyzer = LLMAnalyzer()
         self.filter = PaperFilter(output_mode=output_mode)
@@ -165,8 +166,10 @@ class Pipeline:
         print("\n[1/5] Start fetching papers...")
         saved_count = 0
         with SessionLocal() as session:
+            # 合并DBLP和arXiv论文来源
             for venue_name, papers_data in tqdm(
-                    self.fetcher.fetch_all(), desc="    Fetching papers", unit=" venue", leave=False):
+                    merged_fetcher(self.dblp_fetcher, self.arxiv_fetcher),
+                    desc="    Fetching papers", unit=" venue", leave=False):
                 if shutdown_event.is_set():
                     break
                 count = bulk_create_papers(session=session, papers_data=papers_data)
