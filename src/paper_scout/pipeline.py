@@ -91,7 +91,7 @@ class Pipeline:
             logger.debug("User confirm to export papers")
             confirm = input("    Do you want to export these papers? [y/N]: ").strip().lower()
             logger.debug(f"User input: {confirm}")
-            if confirm != 'y':
+            if confirm != "y":
                 logger.info("Export cancelled")
                 print("    Export cancelled")
                 return

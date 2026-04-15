@@ -398,15 +398,15 @@ class ArxivFetcher:
             logger.debug(f"Exception: {e}")
             return [], False
         # 定义命名空间, arXiv XML使用Atom命名空间
-        ns = {'atom': 'http://www.w3.org/2005/Atom'}
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
         # 提取所有条目
-        entries = root.findall('atom:entry', ns)
+        entries = root.findall("atom:entry", ns)
         if not entries:
             return [], False
         should_continue = True
         for entry in entries:
             # 提取发布日期
-            published_tag = entry.find('atom:published', ns)
+            published_tag = entry.find("atom:published", ns)
             if published_tag is None or not published_tag.text:
                 continue
             try:
@@ -426,20 +426,20 @@ class ArxivFetcher:
             if year > self.end_year:  # 当前论文年份大于结束年份, 跳过当前论文, 继续向后获取
                 continue
             # 提取arXiv ID作为DOI
-            id_tag = entry.find('atom:id', ns)
+            id_tag = entry.find("atom:id", ns)
             if id_tag is None:
                 logger.warning(f"Empty ID, skipped")
                 continue
-            arxiv_id = id_tag.text.split('/abs/')[-1].split('v')[0]
+            arxiv_id = id_tag.text.split("/abs/")[-1].split("v")[0]
             doi_key = f"arxiv:{arxiv_id}"
             # 提取标题
-            title_tag = entry.find('atom:title', ns)
+            title_tag = entry.find("atom:title", ns)
             if title_tag is None:
                 logger.warning(f"Empty title, skipped")
                 continue
-            title = title_tag.text.replace('\n', ' ').strip()
+            title = title_tag.text.replace("\n", " ").strip()
             # 提取摘要
-            summary_tag = entry.find('atom:summary', ns)
+            summary_tag = entry.find("atom:summary", ns)
             if summary_tag is None:
                 logger.warning(f"Empty abstract, skipped")
                 continue
