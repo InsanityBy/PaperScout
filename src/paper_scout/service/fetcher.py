@@ -17,6 +17,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from paper_scout.core.config import configs
 from paper_scout.core.constant import (
+    ARXIV_LARGE_FETCH_THRESHOLD,
     ARXIV_PERIOD,
     ARXIV_RATE_LIMIT,
     DBLP_PAPER_RULE,
@@ -288,9 +289,16 @@ class DBLPFetcher:
 class ArxivFetcher:
     """arXiv论文获取器"""
 
-    def __init__(self, start_year: int = 2024, end_year: int = 2025) -> None:
+    def __init__(self,
+                 start_year: int = 2024,
+                 end_year: int = 2025,
+                 start_date: str | None = None,
+                 end_date: str | None = None) -> None:
         self.start_year = start_year
         self.end_year = end_year
+        self.start_date = start_date  # YYYYMMDDhhmm
+        self.end_date = end_date      # YYYYMMDDhhmm
+        self.mode = "date_range" if (start_date and end_date) else "recent"
         self.session = create_http_session()
 
     @property
@@ -336,13 +344,20 @@ class ArxivFetcher:
 
     def _fetch_category(self, category: str) -> Iterator[List[Dict[str, int | Status | str | VenueType]]]:
         """获取单个分类的论文"""
-        logger.info(f"Fetching papers from arXiv:{category}...")
+        logger.info(f"Fetching papers from arXiv:{category} (mode={self.mode})...")
         start = 0
+        total_fetched_in_category = 0
+        threshold_prompted = False
+        # 构建查询
+        if self.mode == "date_range":
+            search_query = f"cat:{category} AND submittedDate:[{self.start_date} TO {self.end_date}]"
+        else:
+            search_query = f"cat:{category}"
         # 分页获取
         while True:
             # 构建查询参数
             params = {
-                "search_query": f"cat:{category}",
+                "search_query": search_query,
                 "start": start,
                 "max_results": configs.arxiv_batch_limit,
                 "sortBy": "submittedDate",
@@ -356,13 +371,28 @@ class ArxivFetcher:
                 papers, should_continue = self._parse_arxiv_xml(
                     xml_data=xml_data, category=category)
                 if papers:
+                    total_fetched_in_category += len(papers)
                     yield papers
                 else:  # 没有更多数据停止翻页
                     logger.info(f"No more papers for arXiv:{category} at index {start}")
                     break
-                # 早于截止日期停止翻页
-                if not should_continue:
+                # 数据量检查, 仅提示一次
+                if not threshold_prompted and total_fetched_in_category >= ARXIV_LARGE_FETCH_THRESHOLD:
+                    threshold_prompted = True
+                    logger.warning(f"Fetched {total_fetched_in_category} papers from arXiv:{category}, "
+                                   f"exceeding threshold {ARXIV_LARGE_FETCH_THRESHOLD}")
+                    confirm = input(f"\n[!] Already fetched {total_fetched_in_category} papers from "
+                                    f"arXiv:{category}, continue? [y/N]: ").strip().lower()
+                    if confirm != "y":
+                        logger.info(f"User stopped fetching arXiv:{category}")
+                        break
+                # recent模式: 早于截止日期停止翻页
+                if self.mode == "recent" and not should_continue:
                     logger.info(f"Reached cutoff date {self.cutoff_date} at index {start}")
+                    break
+                # date_range模式: API已无更多结果时停止
+                if self.mode == "date_range" and not should_continue:
+                    logger.info(f"No more papers in date range at index {start}")
                     break
                 # 继续翻页
                 start += configs.arxiv_batch_limit
@@ -415,15 +445,15 @@ class ArxivFetcher:
             except ValueError as e:
                 logger.warning(f"Invalid date format: {published_tag.text}, skipped")
                 continue
-            if published_date < self.cutoff_date:  # 当前论文日期早于截止日期, 跳过当前论文, 停止后续获取
+            if self.mode == "recent" and published_date < self.cutoff_date:
                 should_continue = False
                 break
             # 提取年份
             year = published_date.year
-            if year < self.start_year:  # 当前论文年份小于起始年份, 跳过当前论文, 停止后续获取
+            if self.mode == "date_range" and year < self.start_year:  # 当前论文年份小于起始年份, 跳过当前论文, 停止后续获取
                 should_continue = False
                 break
-            if year > self.end_year:  # 当前论文年份大于结束年份, 跳过当前论文, 继续向后获取
+            if self.mode == "date_range" and year > self.end_year:  # 当前论文年份大于结束年份, 跳过当前论文, 继续向后获取
                 continue
             # 提取arXiv ID作为DOI
             id_tag = entry.find("atom:id", ns)
@@ -464,14 +494,56 @@ class ArxivFetcher:
         return " ".join(re.sub(r"<[^>]+>", "", text).split())
 
 
+def create_arxiv_fetcher(start_year: int, end_year: int) -> ArxivFetcher | None:
+    """创建ArxivFetcher, 检测日期冲突并提示用户选择"""
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=configs.arxiv_max_lookback_days)
+    start_of_year = datetime(start_year, 1, 1, tzinfo=timezone.utc)
+    # 检测冲突: start_year早于cutoff_date
+    if start_of_year < cutoff_date:
+        logger.warning(f"Date conflict: start_year={start_year} is before "
+                       f"cutoff_date={cutoff_date.strftime('%Y-%m-%d')} "
+                       f"(lookback_days={configs.arxiv_max_lookback_days})")
+        print(f"\n[!] arXiv date conflict detected:")
+        print(f"    start_year={start_year}, but arXiv lookback is only "
+              f"{configs.arxiv_max_lookback_days} days "
+              f"(cutoff: {cutoff_date.strftime('%Y-%m-%d')})")
+        print(f"    [1] Fetch recent {configs.arxiv_max_lookback_days} days only (default)")
+        print(f"    [2] Enter precise date range (submittedDate query)")
+        print(f"    [3] Skip arXiv fetching")
+        choice = input("    Your choice [1/2/3]: ").strip()
+        if choice == "2":
+            start_input = input("    Enter start date (YYYY-MM-DD): ").strip()
+            end_input = input("    Enter end date (YYYY-MM-DD): ").strip()
+            try:
+                start_date = datetime.strptime(start_input, "%Y-%m-%d").strftime("%Y%m%d0000")
+                end_date = datetime.strptime(end_input, "%Y-%m-%d").strftime("%Y%m%d2359")
+                logger.info(f"User chose date_range mode: {start_input} to {end_input}")
+                return ArxivFetcher(start_year=start_year, end_year=end_year,
+                                    start_date=start_date, end_date=end_date)
+            except ValueError:
+                logger.error(f"Invalid date format: {start_input} / {end_input}")
+                print("    Invalid date format, falling back to recent mode.")
+                return ArxivFetcher(start_year=start_year, end_year=end_year)
+        elif choice == "3":
+            logger.info("User chose to skip arXiv fetching")
+            print("    arXiv fetching skipped.")
+            return None
+        else:
+            logger.info("User chose recent mode (default)")
+            return ArxivFetcher(start_year=start_year, end_year=end_year)
+    # 无冲突, 直接创建
+    return ArxivFetcher(start_year=start_year, end_year=end_year)
+
+
 def merged_fetcher(
     dblp_fetcher: DBLPFetcher,
-    arxiv_fetcher: ArxivFetcher
+    arxiv_fetcher: ArxivFetcher | None
 ) -> Iterator[Tuple[str, List[Dict[str, int | Status | str | VenueType]]]]:
     """合并多个Fetcher的迭代器, 按顺序产生论文"""
     # DBLP论文
     for venue_name, papers in dblp_fetcher.fetch_all():
         yield venue_name, papers
     # arXiv论文
-    for venue_name, papers in arxiv_fetcher.fetch_all():
-        yield venue_name, papers
+    if arxiv_fetcher is not None:
+        for venue_name, papers in arxiv_fetcher.fetch_all():
+            yield venue_name, papers
