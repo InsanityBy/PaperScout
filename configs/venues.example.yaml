@@ -1,10 +1,13 @@
 # venues.example.yaml
 # 来源配置模板, 使用前重命名为`venues.yaml`
 
-# 仅支持从DBLP获取论文, 根据DBLP的数据组织形式, 来源划分为:
+# 支持从DBLP获取论文, 根据DBLP的数据组织形式, 来源划分为:
 # 1. JOURNAL: 期刊
 # 2. CONFERENCE: 会议
-# 来源链接可以从`https://dblp.org/`查询获取
+# 1和2的来源链接可以从`https://dblp.org/`查询获取
+# 支持从arXiv获取论文, 根据arXiv的数据组织形式, 需要给出类别列表:
+# 1. ARXIV: arXiv的类别列表, 例如cs.CV, cs.AI等
+# 1的类别可以从`https://arxiv.org/`查询获取
 
 # 格式说明
 # JOURNAL:
@@ -13,9 +16,14 @@
 # CONFERENCE:
 #   <自定义名称1>: <来源链接1>
 #   <自定义名称2>: <来源链接2>
+# ARXIV:
+#  -  <类别1>
+#  -  <类别2>
 
 
 JOURNAL:
   TACO: db/journals/taco/index.html
 CONFERENCE:
   ISCA: db/conf/isca/index.html
+ARXIV:
+  - cs.CV

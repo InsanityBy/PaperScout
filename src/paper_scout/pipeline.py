@@ -6,6 +6,7 @@ import logging
 import signal
 import threading
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, List
 
 from tqdm import tqdm
@@ -16,7 +17,7 @@ from paper_scout.database.database import init_database, SessionLocal
 from paper_scout.database.model import Paper, Status
 from paper_scout.service.analyzer import LLMAnalyzer
 from paper_scout.service.exporter import CSVExporter, MarkdownExporter
-from paper_scout.service.fetcher import DBLPFetcher
+from paper_scout.service.fetcher import create_arxiv_fetcher, DBLPFetcher, merged_fetcher
 from paper_scout.service.filter import PaperFilter
 from paper_scout.service.parser import DOIParser
 from paper_scout.service.uploader import ZoteroUploader
@@ -48,7 +49,8 @@ class Pipeline:
         self.end_year = end_year
         self.output_mode = output_mode
         init_database()
-        self.fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
+        self.arxiv_fetcher = None  # 检测冲突后创建
+        self.dblp_fetcher = DBLPFetcher(start_year=start_year, end_year=end_year)
         self.parser = DOIParser()
         self.analyzer = LLMAnalyzer()
         self.filter = PaperFilter(output_mode=output_mode)
@@ -90,7 +92,7 @@ class Pipeline:
             logger.debug("User confirm to export papers")
             confirm = input("    Do you want to export these papers? [y/N]: ").strip().lower()
             logger.debug(f"User input: {confirm}")
-            if confirm != 'y':
+            if confirm != "y":
                 logger.info("Export cancelled")
                 print("    Export cancelled")
                 return
@@ -163,10 +165,15 @@ class Pipeline:
         logger.info("[1/5] Start fetching papers...")
         print("-" * 50)
         print("\n[1/5] Start fetching papers...")
+        # 创建ArxivFetcher
+        self.arxiv_fetcher = create_arxiv_fetcher(
+            start_year=self.start_year, end_year=self.end_year)
         saved_count = 0
         with SessionLocal() as session:
+            # 合并DBLP和arXiv论文来源
             for venue_name, papers_data in tqdm(
-                    self.fetcher.fetch_all(), desc="    Fetching papers", unit=" venue", leave=False):
+                    merged_fetcher(self.dblp_fetcher, self.arxiv_fetcher),
+                    desc="    Fetching papers", unit=" venue", leave=False):
                 if shutdown_event.is_set():
                     break
                 count = bulk_create_papers(session=session, papers_data=papers_data)

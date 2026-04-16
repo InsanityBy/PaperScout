@@ -18,6 +18,8 @@ from pydantic_settings import (
 )
 
 from paper_scout.core.constant import (
+    ARXIV_MAX_BATCH_LIMIT,
+    ARXIV_MAX_LOOKBACK_DAYS,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_CONFIG_DIRECTORY,
     DEFAULT_EXPORT_DIRECTORY,
@@ -28,6 +30,7 @@ from paper_scout.core.constant import (
     S2_MAX_BATCH_LIMIT,
     ZOTERO_MAX_BATCH_LIMIT
 )
+from paper_scout.database.model import VenueType
 
 
 # 配置目录
@@ -79,6 +82,8 @@ class AppConfig(BaseSettings):
     max_retries: PositiveInt = DEFAULT_MAX_RETRIES
     request_timeout: PositiveInt = DEFAULT_REQUEST_TIMEOUT
     # 请求链接配置
+    arxiv_base_url: str = "http://export.arxiv.org"
+    arxiv_batch_limit: PositiveInt = Field(le=ARXIV_MAX_BATCH_LIMIT, default=ARXIV_MAX_BATCH_LIMIT)
     dblp_base_url: str = "https://dblp.org"
     cr_base_url: str = "https://api.crossref.org"
     s2_base_url: str = "https://api.semanticscholar.org"
@@ -89,6 +94,9 @@ class AppConfig(BaseSettings):
     llm_model: str = "deepseek-chat"
     zotero_batch_limit: PositiveInt = Field(
         le=ZOTERO_MAX_BATCH_LIMIT, default=ZOTERO_MAX_BATCH_LIMIT)
+    # 日期限制
+    arxiv_max_lookback_days: PositiveInt = Field(
+        le=ARXIV_MAX_LOOKBACK_DAYS, default=ARXIV_MAX_LOOKBACK_DAYS)
     # 分析配置
     relevance_threshold: float = 7.0  # 相关性阈值, 用于筛选出相关性高的论文
     # 导出配置
@@ -99,7 +107,7 @@ class AppConfig(BaseSettings):
 
     # 动态配置(tags.yaml和venues.yaml)
     tags: Dict[str, List[str]] = {}
-    venues: Dict[str, Dict[str, str] | None] = {}
+    venues: Dict[str, Dict[str, str] | List[str] | None] = {}
 
     # 加载凭证配置和业务配置
     model_config = SettingsConfigDict(
@@ -144,6 +152,24 @@ class AppConfig(BaseSettings):
             print(f"Failed to load: {config_directory / 'venues.yaml'}")
             raise e
         return data
+
+    @model_validator(mode="after")
+    def _validate_venues_structure(self) -> "AppConfig":
+        """验证venues配置的数据结构"""
+        # 数据结构校验
+        for venue_type, data in self.venues.items():
+            if venue_type == VenueType.ARXIV.value:  # ARXIV必须是列表
+                if data is not None and not isinstance(data, list):
+                    raise ValueError(f"venues.ARXIV must be List[str], got {type(data).__name__}")
+                if data and not all(isinstance(category, str) for category in data):
+                    raise ValueError(f"venues.ARXIV categories must be strings")
+            else:  # 其他类型必须是字典
+                if data is not None and not isinstance(data, dict):
+                    raise ValueError(f"venues.{venue_type} must be Dict[str, str], "
+                                     f"got {type(data).__name__}")
+                if data and not all(isinstance(v, str) for v in data.values()):
+                    raise ValueError(f"venues.{venue_type} values must be strings")
+        return self
 
     @property
     def common_headers(self) -> Dict[str, str]:
