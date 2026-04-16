@@ -125,7 +125,7 @@ paper_scout -s 2024 -e 2025 -q COMPLETED
 - **Required Arguments (Apply to all commands)**:
     - `--start-year, -s`: Start year for processing papers (applied to both DBLP and arXiv).
     - `--end-year, -e`: End year for processing papers (applied to both DBLP and arXiv).
-    - **Note for arXiv**: In addition to year filtering (`start_year`-`end_year`), arXiv fetching also respects `arxiv_max_lookback_days` config (papers older than N days from now are skipped).
+    - **Note for arXiv**: In addition to year filtering (`start_year`-`end_year`), arXiv fetching also respects `arxiv_max_lookback_days` config. When `start_year` falls before the lookback cutoff date, an interactive prompt offers three options: (1) fetch only recent N days, (2) enter a precise date range using arXiv `submittedDate` query, or (3) skip arXiv fetching entirely.
 - **Optional Arguments**:
     - `--output-mode, -o`: Output mode after filtering (Choices: `none`, `upload`, `export`. Default: `export`).
         - `none`: Finish process without uploading or exporting.
@@ -330,7 +330,7 @@ paper_scout -s 2024 -e 2025 -q COMPLETED
 - **必选参数（适用于所有命令）**：
     - `--start-year, -s`: 处理论文的起始年份（同时应用于 DBLP 和 arXiv）。
     - `--end-year, -e`: 处理论文的结束年份（同时应用于 DBLP 和 arXiv）。
-    - **arXiv 特殊说明**: 除了年份筛选（`start_year`-`end_year`）外，arXiv 抓取还受 `arxiv_max_lookback_days` 配置限制（早于当前时间 N 天的论文会被跳过）。
+    - **arXiv 特殊说明**: 除了年份筛选（`start_year`-`end_year`）外，arXiv 抓取还受 `arxiv_max_lookback_days` 配置限制。当 `start_year` 早于回溯截止日期时，工具将交互式提示三个选项：(1) 仅获取最近 N 天、(2) 输入精确日期范围（使用 arXiv `submittedDate` 查询）、(3) 跳过 arXiv 获取。
 - **可选参数**：
     - `--output-mode, -o`: 筛选后的输出模式（可选：`none`, `upload`, `export`。默认：`export`）。
         - `none`: 仅完成分析和筛选，不进行任何导出或上传。
