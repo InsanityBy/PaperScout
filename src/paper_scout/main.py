@@ -32,6 +32,8 @@ def main():
     group.add_argument("--query-status", "-q", type=str.upper,
                        choices=[status.name for status in Status],
                        help="Query papers by status and export to CSV")
+    group.add_argument("--import-csv", "-i", type=Path,
+                       help="Import updates from a CSV export file")
     parser.add_argument("--output-mode", "-o", type=str.lower, default="export",
                         choices=["none", "export", "upload"],
                         help="Select output mode after filtering (default: export)")
@@ -59,6 +61,8 @@ def main():
             pipeline.run_all()
         elif args.query_status:
             pipeline.query_papers(status=args.query_status)
+        elif args.import_csv:
+            pipeline.import_csv(csv_path=args.import_csv)
         elif args.stage == "fetch":
             pipeline.run_fetch_stage()
         elif args.stage == "parse":
