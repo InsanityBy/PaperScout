@@ -6,7 +6,7 @@ import logging
 import signal
 import threading
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Callable, Dict, List
 
 from tqdm import tqdm
@@ -19,6 +19,7 @@ from paper_scout.service.analyzer import LLMAnalyzer
 from paper_scout.service.exporter import CSVExporter, MarkdownExporter
 from paper_scout.service.fetcher import create_arxiv_fetcher, DBLPFetcher, merged_fetcher
 from paper_scout.service.filter import PaperFilter
+from paper_scout.service.importer import CSVImporter
 from paper_scout.service.parser import DOIParser
 from paper_scout.service.uploader import ZoteroUploader
 
@@ -55,8 +56,9 @@ class Pipeline:
         self.analyzer = LLMAnalyzer()
         self.filter = PaperFilter(output_mode=output_mode)
         self.uploader = ZoteroUploader()
-        self.exporter = MarkdownExporter()
+        self.markdown_exporter = MarkdownExporter()
         self.csv_exporter = CSVExporter()
+        self.csv_importer = CSVImporter()
 
     def query_papers(self, status: str) -> None:
         """查询论文"""
@@ -125,6 +127,49 @@ class Pipeline:
                         continue
             logger.info(f"Exported {count} papers successfully")
             print(f"[*] Exported {count} papers successfully")
+
+    def import_csv(self, csv_path: Path) -> None:
+        """从CSV文件导入更新"""
+        logger.info("-" * 50)
+        logger.info(f"Importing updates from CSV...")
+        print("-" * 50)
+        print("\nImporting updates from CSV...")
+        # 检查文件是否存在
+        if not csv_path.is_file():
+            logger.error(f"CSV file not found: {csv_path}")
+            print(f"[!] CSV file not found: {csv_path}")
+            return
+        # 导入更新
+        summary = self.csv_importer.import_from_csv(file_path=csv_path)
+        # 统计报告
+        total = summary.get("total_rows", 0)
+        updated = summary.get("updated", 0)
+        unchanged = summary.get("unchanged", 0)
+        duplicate = summary.get("duplicate_rows", 0)
+        skipped = summary.get("skipped_unknown_doi", 0)
+        invalid = summary.get("invalid_rows", 0)
+        errors = summary.get("errors", [])
+        logger.info(
+            f"CSV import summary: total={total}, updated={updated}, unchanged={unchanged}, "
+            f"duplicate={duplicate}, skipped={skipped}, invalid={invalid}, error={len(errors)}"
+        )
+        # 正常信息
+        print(f"[*] CSV import summary")
+        print(f"    Total: {total}")
+        print(f"    Updated: {updated}")
+        print(f"    Unchanged: {unchanged}")
+        print(f"    Duplicates: {duplicate}")
+        print(f"    Skipped (unknown DOI): {skipped}")
+        print(f"    Invalid: {invalid}")
+        # 错误信息
+        if errors:
+            # 仅显示部分错误信息以避免过长输出
+            sample = errors[:5]
+            print("    Errors:")
+            for error in sample:
+                print(f"        - {error}")
+            if len(errors) > len(sample):
+                print(f"        ... {len(errors) - len(sample)} more")
 
     def run_all(self) -> None:
         """运行所有流程"""
@@ -235,7 +280,7 @@ class Pipeline:
             process_function = self.uploader.upload_all
         elif self.output_mode == "export":
             current_status_list = [Status.PENDING_EXPORT, Status.EXPORT_FAILED]
-            process_function = self.exporter.export_all
+            process_function = self.markdown_exporter.export_all
         else:
             current_status_list = []
         for status in current_status_list:
