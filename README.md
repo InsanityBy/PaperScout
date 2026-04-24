@@ -19,6 +19,7 @@
 - **Output**: Flexible output options after filtering. Support uploading directly to specified Zotero collections, exporting as local Markdown files, or finishing without any output.
 - **Resilience**: Track the status of each paper in a local SQLite database (`PENDING_FETCH`, `PENDING_PARSE`, etc.) to support safe batch processing and resuming from interruptions.
 - **Query**: Interactively query papers by processing status and time range, then append or export the results to a structured CSV file.
+- **Import**: Import updates from a previously exported and edited CSV file to batch modify paper metadata, tags, scores, and processing status in the database.
 
 ### Data Sources
 
@@ -118,6 +119,10 @@ paper_scout -s 2024 -e 2025 --stage output
 paper_scout -s 2024 -e 2025 --query COMPLETED
 # Or shorthand:
 paper_scout -s 2024 -e 2025 -q COMPLETED
+# Import updates from a CSV file
+paper_scout -s 2024 -e 2025 --import-csv path/to/updates.csv
+# Or shorthand:
+paper_scout -s 2024 -e 2025 -i path/to/updates.csv
 ```
 
 **Global Options**:
@@ -133,6 +138,19 @@ paper_scout -s 2024 -e 2025 -q COMPLETED
         - `export`: Export relevant papers as formatted local Markdown files.
     - `--log-directory`: Directory to store log files (Default: `logs`).
     - `--log-level`: Logging level (Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+
+### CSV Import Guidelines
+
+When using the `--import-csv` feature, **we strongly recommend modifying the CSV file exported via the `--query` command** rather than creating one from scratch. If you choose to create it manually, please observe the following rules:
+
+- **Header Row**: The CSV must include a header row. The first row is always treated as column names. Headerless CSV files are not supported, even if their column order matches an exported CSV.
+- **Required Column**: `DOI` must be present in the header. Rows with DOIs that do not exist in the database will be automatically ignored. Empty files or blank headers report `CSV header missing`; headers without `DOI` report `CSV header missing required column: DOI`.
+- **Optional Columns**: You can omit any supported non-`DOI` column. Missing optional columns are skipped and do not block import. Supported column headers include: `Year`, `Venue Type`, `Venue`, `Title`, `Abstract`, `Title (CN)`, `Abstract (CN)`, `Relevance Score`, `Relevance Reason`, `Tags`, `Status`, and `Retry Count`.
+- **Unsupported Columns**: Extra columns not listed above are ignored.
+- **Empty Values**: Not providing a value in a cell (leaving it blank) means **no change** to that specific field. It will *not* overwrite the existing database value to null/empty.
+- **Format Validation**: Any cell that does not meet the required format will cause that field's update to be skipped, and an error will be logged.
+- **Unchanged Rows**: The tool compares the CSV data with the database. Rows with no supported non-empty update fields, or rows whose values match the existing record, are counted as unchanged.
+- **Duplicate Rows**: If the same DOI appears multiple times in one CSV, the last row wins. Earlier rows for that DOI are counted as duplicates.
 
 ### Project Structure
 
@@ -225,6 +243,7 @@ This project is licensed under the [MIT License](https://mit-license.org). See t
 - **输出 (Output)**: 提供灵活的输出选项。支持自动上传至 Zotero 库、导出为本地 Markdown 文件，或在分析结束后直接标记完成不进行输出。
 - **容错恢复 (Resilience)**: 在本地 SQLite 数据库中跟踪每篇论文的处理状态（如 `PENDING_FETCH`, `PENDING_PARSE` 等），支持安全的批量处理和断点续传。
 - **查询 (Query)**: 支持按处理状态和时间范围交互式查询论文，并将结果追加或导出为结构化的 CSV 文件。
+- **导入 (Import)**: 支持从导出并编辑后的 CSV 文件中导入更新，批量修改数据库中论文的元数据、标签、评分和处理状态等信息。
 
 ### 数据源
 
@@ -324,6 +343,10 @@ paper_scout -s 2024 -e 2025 --stage output
 paper_scout -s 2024 -e 2025 --query COMPLETED
 # 或使用简写参数:
 paper_scout -s 2024 -e 2025 -q COMPLETED
+# 从 CSV 文件中导入更新
+paper_scout -s 2024 -e 2025 --import-csv path/to/updates.csv
+# 或使用简写参数:
+paper_scout -s 2024 -e 2025 -i path/to/updates.csv
 ```
 
 **全局选项**：
@@ -339,6 +362,19 @@ paper_scout -s 2024 -e 2025 -q COMPLETED
         - `export`: 将筛选后的论文保存为格式化的本地 Markdown 文件。
     - `--log-directory`: 日志存储目录（默认：`logs`）。
     - `--log-level`: 日志记录级别（可选：`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`）。
+
+### CSV 导入规范
+
+在使用 `--import-csv` 功能时，**强烈建议修改通过 `--query` 状态查询功能导出的 CSV 文件**，尽量避免从头手动编写。如果必须自行编写，请遵守以下规则：
+
+- **表头**：CSV 必须包含表头行。工具始终把第一行当作列名处理；不支持无表头 CSV，即使其列顺序与导出的 CSV 完全一致。
+- **必填列**：表头中必须包含 `DOI` 列。数据库中不存在的 DOI 对应的整行数据会被直接忽略。空文件或空表头会报告 `CSV header missing`；有表头但缺少 `DOI` 列会报告 `CSV header missing required column: DOI`。
+- **可选列**：除 `DOI` 列外，其他支持列均可省略。缺失的可选列会被跳过，不影响导入。系统支持的列包括 `Year`, `Venue Type`, `Venue`, `Title`, `Abstract`, `Title (CN)`, `Abstract (CN)`, `Relevance Score`, `Relevance Reason`, `Tags`, `Status`, `Retry Count`。
+- **不支持列**：额外的不支持列会被忽略。
+- **空值逻辑**：如果某列不提供值（即单元格留空），系统会认为**不修改**该字段，而*不是*将数据库中的该记录修改为空值。
+- **格式校验**：每个单元格的值必须符合对应字段的数据类型格式。如果不符合格式要求，该字段的更新将被跳过并记录错误信息。
+- **无变动跳过**：导入时会与数据库原始数据进行对比。没有任何受支持的非空更新字段，或字段值与数据库记录一致的行，会被统计为无变动。
+- **重复行处理**：如果同一个 DOI 在一个 CSV 中出现多次，最后一行生效；该 DOI 前面的重复行会被统计为重复。
 
 ### 项目结构
 
