@@ -6,7 +6,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Literal, Tuple
 
 import yaml
 from pydantic import PositiveInt, Field, model_validator
@@ -90,8 +90,13 @@ class AppConfig(BaseSettings):
     s2_batch_limit: PositiveInt = Field(le=S2_MAX_BATCH_LIMIT, default=S2_MAX_BATCH_LIMIT)
     oa_base_url: str = "https://api.openalex.org"
     oa_batch_limit: PositiveInt = Field(le=OA_MAX_BATCH_LIMIT, default=OA_MAX_BATCH_LIMIT)
+    llm_provider: Literal[
+        "deepseek", "qwen", "kimi", "glm", "seed", "openai_compatible"] = "deepseek"
     llm_base_url: str = "https://api.deepseek.com"
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-v4-flash"
+    llm_thinking_mode: Literal["disabled", "enabled", "auto"] = "disabled"
+    llm_reasoning_effort: Literal["low", "medium", "high", "max"] = "medium"
+    llm_thinking_budget: PositiveInt | None = None
     zotero_batch_limit: PositiveInt = Field(
         le=ZOTERO_MAX_BATCH_LIMIT, default=ZOTERO_MAX_BATCH_LIMIT)
     # 日期限制

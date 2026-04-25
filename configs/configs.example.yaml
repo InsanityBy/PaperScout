@@ -24,13 +24,37 @@ s2_batch_limit: 500
 # OpenAlex: 获取论文详情
 oa_base_url: "https://api.openalex.org"
 oa_batch_limit: 50
+
 # LLM: 翻译/分析论文详情
+# 当前验证支持的供应商: deepseek, qwen, kimi, glm, seed
+# 不支持的供应商如果兼容OpenAI接口, 可设置为openai_compatible, 但不保证完全兼容
+llm_provider: "deepseek"
+# 下列内容为当前中国内地使用的接口地址, 使用前请先查阅文档确认接口地址和模型名
+#     DeepSeek: llm_base_url: "https://api.deepseek.com"
+#     Qwen: llm_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+#     Kimi: llm_base_url: "https://api.moonshot.cn/v1"
+#     GLM: llm_base_url: "https://open.bigmodel.cn/api/paas/v4"
+#     Seed: llm_base_url: "https://ark.cn-beijing.volces.com/api/v3"
 llm_base_url: "https://api.deepseek.com"
-llm_model: "deepseek-chat"
+llm_model: "deepseek-v4-flash"
+# 思考模式: disabled, enabled, auto
+# 不支持设置auto的供应商会使用模型默认行为 (默认行为通常是启用思考模式)
+# openai_compatible会忽略思考配置
+llm_thinking_mode: "disabled"
+# 思考强度: low, medium, high, max
+#     DeepSeek: high, max (官方兼容low和medium, 均映射为high)
+#     Seed: low, medium, high (不支持max)
+# 不支持思考强度设置的供应商会忽略该配置
+llm_reasoning_effort: "high"
+# 思考预算: Token数, 不需要时留空
+#     Qwen: 支持设置思考预算
+# 不支持思考预算设置的供应商会忽略该配置
+llm_thinking_budget: ~
+
 # Zotero: 上传论文
 zotero_batch_limit: 50
 
-# 日期限制
+# arXiv回溯日期限制
 arxiv_max_lookback_days: 30
 
 # 分析配置
