@@ -5,7 +5,7 @@
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import instructor
 from openai import OpenAI
@@ -41,6 +41,8 @@ class LLMAnalyzer:
             OpenAI(api_key=configs.llm_api_key, base_url=configs.llm_base_url),
             mode=instructor.Mode.JSON
         )
+        # 获取LLM设置
+        self.llm_settings = self._build_llm_settings()
         # 获取标签
         tags = configs.tags
         self.valid_tags = {tag for tag_list in configs.tags.values() for tag in tag_list}
@@ -126,7 +128,8 @@ class LLMAnalyzer:
             ],
             max_retries=0,
             model=configs.llm_model,
-            timeout=configs.request_timeout
+            timeout=configs.request_timeout,
+            **self.llm_settings
         )
         final_result = None
         for partial_result in response_generator:
@@ -149,3 +152,48 @@ class LLMAnalyzer:
         paper.relevance_reason = data.relevance_reason
         paper.tags_json = json.dumps(valid_keywords, ensure_ascii=False)
         return True
+
+    def _build_llm_settings(self) -> Dict[str, Any]:
+        """构建不同OpenAI兼容供应商的额外请求参数"""
+        provider = configs.llm_provider
+        mode = configs.llm_thinking_mode
+        effort = configs.llm_reasoning_effort
+        budget = configs.llm_thinking_budget
+        settings = {}
+        extra_body = {}
+        # 处理不同供应商
+        if provider == "deepseek":
+            # DeepSeek不支持思考模式设置为auto
+            # auto对应默认模式, 默认启用思考
+            if mode != "auto":
+                extra_body["thinking"] = {"type": mode}
+            # 思考模式启用, 设置思考强度
+            if mode != "disabled":
+                # DeepSeek API 自动处理low和medium映射为high
+                settings["reasoning_effort"] = effort
+        elif provider == "qwen":
+            # Qwen不支持思考模式设置为auto
+            # auto对应默认模式, 默认启用思考
+            if mode != "auto":
+                extra_body["enable_thinking"] = (mode == "enabled")
+            # 思考模式启用, 设置思考长度
+            if mode != "disabled" and budget is not None:
+                extra_body["thinking_budget"] = budget
+        elif provider in {"kimi", "glm"}:
+            # Kimi和GLM不支持思考模式设置为auto
+            # auto对应默认模式, 默认启用思考
+            # Kimi和GLM不支持思考强度和长度设置
+            if mode != "auto":
+                extra_body["thinking"] = {"type": mode}
+        elif provider == "seed":
+            # Seed支持思考模式设置为auto
+            extra_body["thinking"] = {"type": mode}
+            # 思考模式启用, 设置思考强度
+            if mode != "disabled":
+                # Seed不支持设置为max, 映射max为high
+                effort = "high" if effort == "max" else effort
+                settings["reasoning_effort"] = effort
+        # 添加额外参数
+        if extra_body:
+            settings["extra_body"] = extra_body
+        return settings
