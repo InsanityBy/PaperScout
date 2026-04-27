@@ -43,7 +43,7 @@ llm_model: "deepseek-v4-flash"
 llm_thinking_mode: "disabled"
 # 思考强度: low, medium, high, max
 #     DeepSeek: high, max (官方兼容low和medium, 均映射为high)
-#     Seed: low, medium, high (不支持max)
+#     Seed: low, medium, high (不支持max, 映射为high)
 # 不支持思考强度设置的供应商会忽略该配置
 llm_reasoning_effort: "high"
 # 思考预算: Token数, 不需要时留空

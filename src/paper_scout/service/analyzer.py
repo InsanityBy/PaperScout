@@ -169,6 +169,7 @@ class LLMAnalyzer:
                 extra_body["thinking"] = {"type": mode}
             # 思考模式启用, 设置思考强度
             if mode != "disabled":
+                # DeepSeek API 自动处理low和medium映射为high
                 settings["reasoning_effort"] = effort
         elif provider == "qwen":
             # Qwen不支持思考模式设置为auto
@@ -189,6 +190,8 @@ class LLMAnalyzer:
             extra_body["thinking"] = {"type": mode}
             # 思考模式启用, 设置思考强度
             if mode != "disabled":
+                # Seed不支持设置为max, 映射max为high
+                effort = "high" if effort == "max" else effort
                 settings["reasoning_effort"] = effort
         # 添加额外参数
         if extra_body:

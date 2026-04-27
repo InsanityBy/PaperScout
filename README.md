@@ -14,7 +14,7 @@
     - DBLP (Conferences / Journals)
     - arXiv (by category with date and year filtering)
 - **Parse**: Verify DOIs using Crossref and fetch abstracts automatically via Semantic Scholar and OpenAlex APIs.
-- **Analyze**: Utilize LLMs (default supports [DeepSeek](https://www.deepseek.com)) to evaluate and score paper relevance (0.0-10.0 float scale, 0.1 increments) based on customizable user interests, extract tags, and translate titles and abstracts to Chinese.
+- **Analyze**: Utilize configurable OpenAI-compatible LLM providers ([DeepSeek](https://platform.deepseek.com), [Qwen](https://qwen.ai) provided by [Alibaba Cloud](https://bailian.aliyun.com), [Kimi](https://platform.kimi.com), [GLM](https://bigmodel.cn), [ByteDance Seed](https://seed.bytedance.com) provided by [Volcengine](https://www.volcengine.com), or a generic OpenAI-compatible endpoint) to evaluate and score paper relevance (0.0-10.0 float scale, 0.1 increments) based on customizable user interests, extract tags, and translate titles and abstracts to Chinese.
 - **Filter**: Independently evaluate and filter successfully analyzed papers based on a customizable threshold. Supports re-evaluating previously filtered papers when run individually.
 - **Output**: Flexible output options after filtering. Support uploading directly to specified Zotero collections, exporting as local Markdown files, or finishing without any output.
 - **Resilience**: Track the status of each paper in a local SQLite database (`PENDING_FETCH`, `PENDING_PARSE`, etc.) to support safe batch processing and resuming from interruptions.
@@ -80,11 +80,28 @@ cp tags.example.yaml tags.yaml
 cp venues.example.yaml venues.yaml
 ```
 
-- `configs.yaml`: System prompts, rate limits, chunk size settings, custom relevance threshold, `export_directory` for saving markdown files (defaults to `exports/`), and arXiv-specific parameters.
+- `configs.yaml`: System prompts, LLM provider settings, rate limits, chunk size settings, custom relevance threshold, `export_directory` for saving markdown files (defaults to `exports/`), and arXiv-specific parameters.
 - `tags.yaml`: Predefined tags for LLM classification.
 - `venues.yaml`: Target sources configuration:
     - DBLP venues: URL-based mapping for conferences and journals (e.g., `CONFERENCE: {url1: ..., url2: ...}`)
     - arXiv categories: Category list for arXiv preprints (e.g., `ARXIV: [cs.CV, cs.AI, cs.LG]`)
+
+#### 3. LLM Provider Configuration
+
+The analyzer will read a single `LLM_API_KEY` from `.env`. Select the provider and model in `configs.yaml`:
+
+``` yaml
+llm_provider: "deepseek"  # deepseek, qwen, kimi, glm, seed, openai_compatible
+llm_base_url: "https://api.deepseek.com"
+llm_model: "deepseek-v4-flash"
+llm_thinking_mode: "disabled"  # disabled, enabled, auto
+llm_reasoning_effort: "high"   # DeepSeek/Seed only: low, medium, high, max
+llm_thinking_budget:           # Qwen only, optional token budget
+```
+
+Provider-specific thinking parameters are mapped internally according to each compatible API. `openai_compatible` sends only the basic OpenAI chat-completion parameters and ignores thinking options for maximum compatibility.
+
+> **Tip**: DeepSeek supports `llm_reasoning_effort` values `high` and `max`; `low` and `medium` are mapped to `high`. Seed supports `llm_reasoning_effort` values `low`, `medium`, and `high`; `max` is mapped to `high`.
 
 ### Usage
 
@@ -238,7 +255,7 @@ This project is licensed under the [MIT License](https://mit-license.org). See t
     - DBLP（会议/期刊）
     - arXiv（基于分类，支持年份和日期筛选）
 - **解析 (Parse)**: 使用 Crossref 验证 DOI，并通过 Semantic Scholar 和 OpenAlex 提供的 API 自动获取摘要。
-- **分析 (Analyze)**: 利用大语言模型（默认支持 [DeepSeek](https://www.deepseek.com)）根据自定义用户兴趣对论文进行 10 分制相关性打分（浮点数，步长 0.1），提取标签，并将标题和摘要翻译为中文。
+- **分析 (Analyze)**: 利用可配置的 OpenAI 兼容大语言模型供应商（[DeepSeek](https://platform.deepseek.com)、由 [阿里云](https://bailian.aliyun.com) 提供的 [Qwen](https://qwen.ai)、[Kimi](https://platform.kimi.com)、[GLM](https://bigmodel.cn)、由 [火山引擎](https://www.volcengine.com) 提供的 [字节跳动 Seed](https://seed.bytedance.com)，或通用 OpenAI 兼容端点）根据自定义用户兴趣对论文进行 10 分制相关性打分（浮点数，步长 0.1），提取标签，并将标题和摘要翻译为中文。
 - **筛选 (Filter)**: 独立阶段，可随时根据配置文件中的阈值，对分析成功的论文进行评估和归类。单独运行该阶段时，支持对过往已筛选的论文重新根据新阈值进行评估。
 - **输出 (Output)**: 提供灵活的输出选项。支持自动上传至 Zotero 库、导出为本地 Markdown 文件，或在分析结束后直接标记完成不进行输出。
 - **容错恢复 (Resilience)**: 在本地 SQLite 数据库中跟踪每篇论文的处理状态（如 `PENDING_FETCH`, `PENDING_PARSE` 等），支持安全的批量处理和断点续传。
@@ -304,11 +321,28 @@ cp tags.example.yaml tags.yaml
 cp venues.example.yaml venues.yaml
 ```
 
-- `configs.yaml`: 系统提示词、速率限制、分块设置、相关性过滤阈值、Markdown 导出路径 `export_directory`（默认为 `exports/`），以及 arXiv 特定参数。
+- `configs.yaml`: 系统提示词、LLM 供应商配置、速率限制、分块设置、相关性过滤阈值、Markdown 导出路径 `export_directory`（默认为 `exports/`），以及 arXiv 特定参数。
 - `tags.yaml`: 供 LLM 分类的预设标签。
 - `venues.yaml`: 目标数据源配置：
     - DBLP 出处: 会议和期刊的 URL 映射（如 `CONFERENCE: {url1: ..., url2: ...}`）
     - arXiv 分类: arXiv 预印本的分类列表（如 `ARXIV: [cs.CV, cs.AI, cs.LG]`）
+
+#### 3. LLM 供应商配置
+
+分析阶段将从 `.env` 读取统一的 `LLM_API_KEY`。请在 `configs.yaml` 中选择供应商与模型：
+
+``` yaml
+llm_provider: "deepseek"  # deepseek, qwen, kimi, glm, seed, openai_compatible
+llm_base_url: "https://api.deepseek.com"
+llm_model: "deepseek-v4-flash"
+llm_thinking_mode: "disabled"  # disabled, enabled, auto
+llm_reasoning_effort: "high"   # 仅DeepSeek/Seed使用: low, medium, high, max
+llm_thinking_budget:           # 仅Qwen使用, 可选Token预算
+```
+
+不同供应商的思考参数会在内部按其兼容 API 要求映射。`openai_compatible` 只发送 OpenAI Chat Completions 基础参数，并忽略思考配置，以保证最大兼容性。
+
+> **提示**：DeepSeek 支持设置 `llm_reasoning_effort` 为 `high` 和 `max`，`low` 和 `medium` 映射为 `high`。Seed 支持设置 `llm_reasoning_effort` 为 `low`、`medium` 和 `high`，`max` 映射为 `high`。
 
 ### 使用说明
 
