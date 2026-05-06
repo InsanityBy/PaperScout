@@ -1,6 +1,6 @@
 # Profile Workflow
 
-Use this reference to resolve, create, validate, or update the effective paper-analysis configuration.
+Use this reference to resolve, validate, create, or update the effective paper-analysis profile configuration.
 
 ## Local Files
 
@@ -68,7 +68,7 @@ Rules:
 
 - If the prompt provides a complete valid config, use it for this request and do not require a local profile.
 - If the prompt provides only some valid fields, merge them with `.paper-analysis/profile.yaml`.
-- If a prompt field is invalid, do not use it silently. If a valid local value exists, fall back to it and mention the fallback when the output format allows explanatory text. If no valid local value exists, ask the user to correct the field.
+- If a prompt field is invalid, do not use it silently. If a valid local profile value exists, fall back to it and mention the fallback when the output format allows explanatory text. If no valid local value exists, ask the user to correct the field.
 - Prompt overrides affect only the current analysis unless the user explicitly asks to update the local profile.
 
 ## Validation
@@ -93,29 +93,29 @@ Minimum valid `user_interests`:
 Valid `tags`:
 
 - YAML-like mapping of category names to lists of tag strings.
-- Empty or missing tags are allowed; then output `tags: []`.
+- Empty or missing tags are allowed; then return `tags: []`.
 
 ## Guided Profile Creation
 
 When required configuration is missing and no usable local profile exists:
 
-- Start an interactive setup and continue until a usable profile is ready.
-- Do not merely tell the user to create a profile.
+Do not merely tell the user to create a profile. Start an interactive creation and continue until a usable profile is ready.
 
 ### Creation Flow
 
-Ask one focused question at a time unless the user asks for a compact setup form.
+Ask one focused question at a time unless the user asks for a compact creation form.
 
 1. **Output preferences**
-   - Ask for `output_language`: `zh` or `en` with short explanation for each option.
-   - Ask for `output_format`: `paperscout_json`, `markdown`, or `both` with short explanation for each option.
+   - Ask for `output_language`: `zh` or `en`.
+   - Ask for `output_format`: `paperscout_json`, `markdown`, or `both`.
+   - Give short description and explanation for each option.
 2. **Core research area**
    - Ask the user to describe the papers they want to find in 2-4 sentences.
    - If the answer is broad, ask one follow-up to narrow the target problem, method, domain, or evidence type.
 3. **Veto rules**
    - Ask for absolute dealbreakers that should force `relevance_score=0.0`.
    - If the user has none, create an explicit empty section such as `None`.
-   - Keep vetoes rare and verifiable from title/abstract.
+   - Keep vetoes rare and verifiable from title and abstract.
 4. **Must-have scoring**
    - Ask for 2-5 positive criteria and help assign point ranges that sum to `10.0`.
    - If the user is unsure, propose a default split:
@@ -129,14 +129,14 @@ Ask one focused question at a time unless the user asks for a compact setup form
    - If the user has none, create explicit `None` entries.
 6. **Tags**
    - Ask whether the user has a controlled tag vocabulary.
-   - If yes, collect categories and tag strings in format `category1: tag1, tag2,...`
-   - If there are any issues such as overlapping or ambiguous categories and tags, remind the user and ask one follow-up.
+   - If yes, collect categories and tag strings in format: `category1: tag1, tag2,...`
    - If no, use `tags: {}` and remind the user that analyses will return `tags: []`.
+   - If there are any issues such as overlapping or ambiguous categories and tags, remind the user and ask one follow-up.
 7. **Review and create**
    - Show the complete proposed `.paper-analysis/profile.yaml`.
    - Ask for confirmation or edits.
    - After confirmation, create `.paper-analysis/` if needed and write `.paper-analysis/profile.yaml`.
-   - If a paper title/abstract was already provided, continue with analysis using the newly created profile.
+   - If the paper title and abstract were already provided, continue with analysis using the newly created profile.
 
 Do not overwrite an existing profile unless the user explicitly asks for an update.
 

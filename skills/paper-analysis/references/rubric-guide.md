@@ -50,4 +50,4 @@ Keep most penalty and bonus values between 0.5 and 2.0. Large values make the ba
 
 ## Language Choice
 
-Use `output_language=zh` when the user wants Chinese translations and Chinese reasoning. Use `output_language=en` when the downstream workflow only needs English metadata; in that mode, PaperScout-compatible JSON keeps `title_cn` and `abstract_cn` as empty strings.
+Use `output_language=zh` when the user wants Chinese translations and Chinese reasoning. Use `output_language=en` when the downstream workflow only needs English metadata.

@@ -1,10 +1,14 @@
 # Feedback Guide
 
-Use this reference when the user asks for feedback, calibration, rubric review, strictness review, or recent-result diagnosis.
+Use this reference when the user asks for calibration feedback, relevance rubric review, or recent-result diagnosis.
 
 ## History Schema
 
-Each analysis should append one JSON object per line to `.paper-analysis/analysis-history.jsonl`
+Each analysis should append one JSON object per line to:
+
+```text
+.paper-analysis/analysis-history.jsonl
+```
 
 Recommended fields:
 
