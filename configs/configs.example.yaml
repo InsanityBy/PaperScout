@@ -88,7 +88,7 @@ system_prompt: |-
   {
       "title_cn": "Chinese translation of the title",
       "abstract_cn": "Chinese translation of the abstract",
-      "relevance_reason": "若触发否决项直接填写: 0.0(触发否决项原因)。正常填写: 基础分X.X(条件1: X.X, 理由; 条件2: X.X, 理由...)。扣分项: -X.X(理由), 加分项: +X.X(理由)。省略无加/扣分部分。",
+      "relevance_reason": "若触发否决项直接填写: 0.0(触发否决项理由)。正常填写: 基础分X.X(条件1: X.X, 理由; 条件2: X.X, 理由...)。扣分项: -X.X(理由), 加分项: +X.X(理由)。省略无加/扣分部分。",
       "relevance_score": 8.5,
       "keywords": ["tag1", "tag2", "tag3"]
   }

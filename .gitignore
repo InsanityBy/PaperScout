@@ -17,6 +17,7 @@ wheels/
 
 # Project
 .vscode/
+.paper-analysis/
 log/
 logs/
 configs/*

@@ -16,7 +16,7 @@
 - **Parse**: Verify DOIs using Crossref and fetch abstracts automatically via Semantic Scholar and OpenAlex APIs.
 - **Analyze**: Utilize configurable OpenAI-compatible LLM providers ([DeepSeek](https://platform.deepseek.com), [Qwen](https://qwen.ai) provided by [Alibaba Cloud](https://bailian.aliyun.com), [Kimi](https://platform.kimi.com), [GLM](https://bigmodel.cn), [ByteDance Seed](https://seed.bytedance.com) provided by [Volcengine](https://www.volcengine.com), or a generic OpenAI-compatible endpoint) to evaluate and score paper relevance (0.0-10.0 float scale, 0.1 increments) based on customizable user interests, extract tags, and translate titles and abstracts to Chinese.
 - **Filter**: Independently evaluate and filter successfully analyzed papers based on a customizable threshold. Supports re-evaluating previously filtered papers when run individually.
-- **Output**: Flexible output options after filtering. Support uploading directly to specified Zotero collections, exporting as local Markdown files, or finishing without any output.
+- **Output**: Flexible output options after filtering. Supports uploading directly to a specified Zotero collection, exporting as local Markdown files, or finishing without any output.
 - **Resilience**: Track the status of each paper in a local SQLite database (`PENDING_FETCH`, `PENDING_PARSE`, etc.) to support safe batch processing and resuming from interruptions.
 - **Query**: Interactively query papers by processing status and time range, then append or export the results to a structured CSV file.
 - **Import**: Import updates from a previously exported and edited CSV file to batch modify paper metadata, tags, scores, and processing status in the database.
@@ -35,6 +35,16 @@ PaperScout supports the following academic paper sources:
   - Coverage: Computer Science preprints with date and year filtering
   - Configuration: Category list (see `venues.yaml`)
   - Status handling: Papers fetched from arXiv skip DOI validation, go directly to analysis stage (marked as `PENDING_ANALYZE`)
+
+### Choosing a Usage Mode
+
+PaperScout can be used at three levels:
+
+- **Full PaperScout workflow**: Use this when you want PaperScout to fetch papers, enrich metadata, analyze relevance, filter results, and export or upload them. Continue with the installation, configuration, and CLI usage sections below.
+- **Standalone paper-analysis skill**: Use [`skills/paper-analysis`](./skills/paper-analysis/) with a skill-aware agent when another agent, CLI, or automation tool already provides paper titles and abstracts, and you need relevance scoring, controlled tag selection, optional Chinese translation, PaperScout-compatible JSON/Markdown output, profile setup, or calibration feedback. The skill resolves `user_interests`, `tags`, `output_language`, and `output_format` from the current request first, then falls back field-by-field to `.paper-analysis/profile.yaml`. If no usable profile exists, it should guide you through output settings, research interests, rubric, and tags, then create `.paper-analysis/profile.yaml` when file writes are available. For OpenClaw, workspace skills can live under `<workspace>/skills/paper-analysis/`; see [OpenClaw Skills](https://docs.openclaw.ai/tools/skills), [ClawHub](https://docs.openclaw.ai/tools/clawhub), and the [ClawHub skill format](https://github.com/openclaw/clawhub/blob/main/docs/skill-format.md).
+- **Prompt-only usage**: Use [`docs/paper-analysis-prompt.md`](./docs/paper-analysis-prompt.md) when you do not want a skill-aware agent or project tool. Choose the English or Chinese template, then choose chat mode or API mode. The default combinations are chat mode with Markdown output and API mode with JSON output; other combinations require editing the template's corresponding section. Fill the angle-bracket `<>` placeholders in the research rubric, optional tag vocabulary, and paper title/abstract sections. For batch processing, call the model once per paper.
+
+> **Note**: The standalone skill has explicit `output_language: zh | en` and `output_format: paperscout_json | markdown | both` settings. In `output_language=en`, PaperScout-compatible JSON keeps `title_cn` and `abstract_cn` as empty strings. The prompt-only templates do not use those configuration fields directly; their language and format are determined by the selected template and its output instructions. Only the standalone skill records local analysis history in `.paper-analysis/analysis-history.jsonl` when the host environment can write files; prompt-only usage has no profile resolution or history-based feedback unless you add that workflow yourself.
 
 ### Prerequisites
 
@@ -69,6 +79,14 @@ cp .env.example .env
 
 Edit `.env` to include your LLM, Semantic Scholar, OpenAlex, and Zotero API keys.
 
+Important environment variables:
+
+- `LLM_API_KEY`: Required for the analyze stage.
+- `S2_API_KEY` and `OA_API_KEY`: Used by Semantic Scholar and OpenAlex during the parse stage. Incorrect or missing keys may cause metadata enrichment to fail.
+- `ZOTERO_USER_ID`, `ZOTERO_API_KEY`, `ZOTERO_INBOX_KEY`: Required only when using Zotero upload. `ZOTERO_TOREAD_KEY` is reserved in the example environment file but is not used by the current upload workflow.
+- `EMAIL`: Used in request headers for external scholarly APIs.
+- `DB_URL`: SQLite database URL. The default is `sqlite:///./db/papers.db`.
+
 #### 2. YAML Configs (`configs/`)
 
 In the `configs/` directory, copy the example files to create your actual configurations:
@@ -80,8 +98,13 @@ cp tags.example.yaml tags.yaml
 cp venues.example.yaml venues.yaml
 ```
 
-- `configs.yaml`: System prompts, LLM provider settings, rate limits, chunk size settings, custom relevance threshold, `export_directory` for saving markdown files (defaults to `exports/`), and arXiv-specific parameters.
-- `tags.yaml`: Predefined tags for LLM classification.
+- `configs.yaml`: Main runtime configuration. The most commonly adjusted fields are:
+    - Processing and retry behavior: `chunk_size`, `max_concurrent_workers`, `max_retries`, and `request_timeout`.
+    - LLM analysis: `llm_provider`, `llm_base_url`, `llm_model`, thinking-related options, `system_prompt`, and `user_interests`.
+    - Filtering and output: `relevance_threshold` and `export_directory` for local Markdown and CSV files.
+    - arXiv fetching: `arxiv_max_lookback_days` and arXiv batch/API settings.
+    - External API endpoints and batch limits for DBLP, Crossref, Semantic Scholar, OpenAlex, and Zotero.
+- `tags.yaml`: Controlled tag vocabulary for LLM classification. Tags are grouped by category, but only exact tag strings from the configured lists are retained in analysis results.
 - `venues.yaml`: Target sources configuration:
     - DBLP venues: URL-based mapping for conferences and journals (e.g., `CONFERENCE: {url1: ..., url2: ...}`)
     - arXiv categories: Category list for arXiv preprints (e.g., `ARXIV: [cs.CV, cs.AI, cs.LG]`)
@@ -133,7 +156,7 @@ paper_scout -s 2024 -e 2025 --stage filter
 # Only run the output stage (upload to Zotero, export to markdown, or do nothing based on output-mode)
 paper_scout -s 2024 -e 2025 --stage output
 # Query papers by status (e.g., COMPLETED) and export to a CSV file
-paper_scout -s 2024 -e 2025 --query COMPLETED
+paper_scout -s 2024 -e 2025 --query-status COMPLETED
 # Or shorthand:
 paper_scout -s 2024 -e 2025 -q COMPLETED
 # Import updates from a CSV file
@@ -151,14 +174,23 @@ paper_scout -s 2024 -e 2025 -i path/to/updates.csv
 - **Optional Arguments**:
     - `--output-mode, -o`: Output mode after filtering (Choices: `none`, `upload`, `export`. Default: `export`).
         - `none`: Finish process without uploading or exporting.
-        - `upload`: Upload relevant papers directly into specified Zotero collections.
+        - `upload`: Upload relevant papers directly into the configured Zotero inbox collection.
         - `export`: Export relevant papers as formatted local Markdown files.
     - `--log-directory`: Directory to store log files (Default: `logs`).
     - `--log-level`: Logging level (Choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 
+### Output File Formats
+
+Generated files are written to `export_directory` in `configs.yaml` (default: `exports/`) unless another path is configured.
+
+- **Markdown paper notes**: Generated by the output stage when `--output-mode export` is used. PaperScout creates one `.md` file per relevant paper, using a sanitized and length-limited paper title as the filename. Each file contains YAML front matter (`title`, `doi`, `year`, `venue`, `tags`, `relevance_score`), the original and Chinese title/abstract, source information, AI relevance analysis, tags, and an empty reading-notes section.
+- **Query CSV files**: Generated by `--query-status/-q` after interactive confirmation. The default filename is `export_<STATUS>_<START_YEAR>_<END_YEAR>.csv`; custom names get a `.csv` suffix automatically. Existing CSV files are appended to, and new files include a UTF-8 BOM for spreadsheet compatibility. Columns are `DOI`, `Year`, `Venue Type`, `Venue`, `Title`, `Abstract`, `Title (CN)`, `Abstract (CN)`, `Relevance Score`, `Relevance Reason`, `Tags`, `Status`, `Retry Count`, `Create Time`, and `Update Time`. The `Tags` column stores the database JSON string.
+- **Zotero items**: Generated by the output stage when `--output-mode upload` is used. PaperScout creates Zotero `journalArticle` items, writes the original title and abstract to Zotero fields, omits pseudo-DOIs, stores Chinese translations and AI analysis in `Extra`, maps extracted tags to Zotero tags, and adds the item to `zotero_inbox_key`.
+- **Logs**: Runtime logs are written to `--log-directory` (default: `logs`).
+
 ### CSV Import Guidelines
 
-When using the `--import-csv` feature, **we strongly recommend modifying the CSV file exported via the `--query` command** rather than creating one from scratch. If you choose to create it manually, please observe the following rules:
+When using the `--import-csv` feature, **we strongly recommend modifying the CSV file exported via the `--query-status` command** rather than creating one from scratch. If you choose to create it manually, please observe the following rules:
 
 - **Header Row**: The CSV must include a header row. The first row is always treated as column names. Headerless CSV files are not supported, even if their column order matches an exported CSV.
 - **Required Column**: `DOI` must be present in the header. Rows with DOIs that do not exist in the database will be automatically ignored. Empty files or blank headers report `CSV header missing`; headers without `DOI` report `CSV header missing required column: DOI`.
@@ -177,6 +209,10 @@ When using the `--import-csv` feature, **we strongly recommend modifying the CSV
 │   ├── configs.yaml          # System configs (from .example.yaml)
 │   ├── tags.yaml             # LLM tags (from .example.yaml)
 │   └── venues.yaml           # DBLP targets (from .example.yaml)
+├── docs/
+│   └── paper-analysis-prompt.md # Bilingual prompt-only template
+├── skills/
+│   └── paper-analysis/       # Paper analysis skill
 ├── db/                       # SQLite database storage (generated automatically)
 ├── exports/                  # Local CSV / Markdown files (generated automatically)
 ├── logs/                     # Log files (generated automatically)
@@ -184,7 +220,7 @@ When using the `--import-csv` feature, **we strongly recommend modifying the CSV
 │   └── paper_scout/          # Main package directory
 │       ├── core/             # Configuration, HTTP client, constants, logging
 │       ├── database/         # SQLite models (SQLAlchemy) and CRUD operations
-│       ├── service/          # Core business logic (fetcher, parser, analyzer, uploader)
+│       ├── service/          # Core business logic (fetcher, parser, analyzer, filter, exporter, importer, uploader)
 │       ├── __init__.py
 │       ├── main.py           # CLI entry point
 │       └── pipeline.py       # Workflow orchestration
@@ -257,7 +293,7 @@ This project is licensed under the [MIT License](https://mit-license.org). See t
 - **解析 (Parse)**: 使用 Crossref 验证 DOI，并通过 Semantic Scholar 和 OpenAlex 提供的 API 自动获取摘要。
 - **分析 (Analyze)**: 利用可配置的 OpenAI 兼容大语言模型供应商（[DeepSeek](https://platform.deepseek.com)、由 [阿里云](https://bailian.aliyun.com) 提供的 [Qwen](https://qwen.ai)、[Kimi](https://platform.kimi.com)、[GLM](https://bigmodel.cn)、由 [火山引擎](https://www.volcengine.com) 提供的 [字节跳动 Seed](https://seed.bytedance.com)，或通用 OpenAI 兼容端点）根据自定义用户兴趣对论文进行 10 分制相关性打分（浮点数，步长 0.1），提取标签，并将标题和摘要翻译为中文。
 - **筛选 (Filter)**: 独立阶段，可随时根据配置文件中的阈值，对分析成功的论文进行评估和归类。单独运行该阶段时，支持对过往已筛选的论文重新根据新阈值进行评估。
-- **输出 (Output)**: 提供灵活的输出选项。支持自动上传至 Zotero 库、导出为本地 Markdown 文件，或在分析结束后直接标记完成不进行输出。
+- **输出 (Output)**: 提供灵活的输出选项。支持自动上传至指定 Zotero 集合、导出为本地 Markdown 文件，或在分析结束后直接标记完成不进行输出。
 - **容错恢复 (Resilience)**: 在本地 SQLite 数据库中跟踪每篇论文的处理状态（如 `PENDING_FETCH`, `PENDING_PARSE` 等），支持安全的批量处理和断点续传。
 - **查询 (Query)**: 支持按处理状态和时间范围交互式查询论文，并将结果追加或导出为结构化的 CSV 文件。
 - **导入 (Import)**: 支持从导出并编辑后的 CSV 文件中导入更新，批量修改数据库中论文的元数据、标签、评分和处理状态等信息。
@@ -276,6 +312,16 @@ PaperScout 支持以下学术论文数据源：
   - 覆盖: 计算机科学领域预印本，支持日期和年份筛选
   - 配置: 分类列表（参见 `venues.yaml`）
   - 状态处理: 从 arXiv 获取的论文跳过 DOI 验证，直接进入分析阶段（标记为 `PENDING_ANALYZE`）
+
+### 选择使用方式
+
+PaperScout 可以按三种层级使用：
+
+- **完整 PaperScout 工作流**: 当你希望 PaperScout 负责获取论文、补全元数据、分析相关性、筛选结果，并导出或上传论文时，选择此方式。继续阅读下方安装、配置和命令行使用说明即可。
+- **独立论文分析 skill**: 当你使用支持 skill 的 agent，且其他 agent、CLI 或自动化工具已经提供论文标题和摘要时，使用 [`skills/paper-analysis`](./skills/paper-analysis/)。它适用于相关性评分、受控标签选择、可选中文翻译、PaperScout 兼容 JSON/Markdown 输出、profile 配置和校准反馈。skill 会优先使用当前请求中的 `user_interests`、`tags`、`output_language` 和 `output_format`，再逐字段回退到 `.paper-analysis/profile.yaml`。如果还没有可用 profile，skill 应逐步引导你填写输出设置、研究兴趣、评分标准和标签，并在可写环境中创建 `.paper-analysis/profile.yaml`。OpenClaw 的 workspace skill 可放在 `<workspace>/skills/paper-analysis/`；可参考 [OpenClaw Skills](https://docs.openclaw.ai/tools/skills)、[ClawHub](https://docs.openclaw.ai/tools/clawhub) 与 [ClawHub skill format](https://github.com/openclaw/clawhub/blob/main/docs/skill-format.md)。
+- **只使用提示词**: 当你不使用支持 skill 的 agent，也不使用项目工具时，使用 [`docs/paper-analysis-prompt.md`](./docs/paper-analysis-prompt.md)。先选择英文或中文模板，再选择聊天模式或 API 模式。默认组合是聊天模式输出 Markdown、API 模式输出 JSON；如果需要其他组合，需要修改模板中的对应部分。使用时替换研究兴趣和评分标准、可选标签词表、论文标题和摘要中的尖括号 `<>` 占位内容。批量处理时，建议每篇论文调用一次模型。
+
+> **注意**：独立 skill 明确支持 `output_language: zh | en` 与 `output_format: paperscout_json | markdown | both`。当 `output_language=en` 时，PaperScout 兼容 JSON 中的 `title_cn` 与 `abstract_cn` 会保留为空字符串。提示词模板本身不直接使用这些配置字段；它的语言和格式由所选模板及其中的输出要求决定。只有独立 skill 会在运行环境可写时把分析历史记录到 `.paper-analysis/analysis-history.jsonl`；只使用提示词时不会自动解析 profile，也不会自动提供基于历史记录的反馈，除非你自行补充这套流程。
 
 ### 前置要求
 
@@ -310,6 +356,14 @@ cp .env.example .env
 
 编辑 `.env` 文件，填入你的 LLM、Semantic Scholar、OpenAlex 和 Zotero 的 API 密钥。
 
+重要环境变量：
+
+- `LLM_API_KEY`: 分析阶段必需。
+- `S2_API_KEY` 和 `OA_API_KEY`: 解析阶段调用 Semantic Scholar 和 OpenAlex 时使用。缺失或配置错误可能导致元数据补全失败。
+- `ZOTERO_USER_ID`, `ZOTERO_API_KEY`, `ZOTERO_INBOX_KEY`: 仅在使用 Zotero 上传时必需。`ZOTERO_TOREAD_KEY` 保留在示例环境变量文件中，但当前上传流程不会使用。
+- `EMAIL`: 用于外部学术 API 请求头。
+- `DB_URL`: SQLite 数据库连接地址，默认值为 `sqlite:///./db/papers.db`。
+
 #### 2. YAML 配置文件 (`configs/`)
 
 进入 `configs/` 目录，将示例文件复制为实际运行的配置文件：
@@ -321,8 +375,13 @@ cp tags.example.yaml tags.yaml
 cp venues.example.yaml venues.yaml
 ```
 
-- `configs.yaml`: 系统提示词、LLM 供应商配置、速率限制、分块设置、相关性过滤阈值、Markdown 导出路径 `export_directory`（默认为 `exports/`），以及 arXiv 特定参数。
-- `tags.yaml`: 供 LLM 分类的预设标签。
+- `configs.yaml`: 主运行配置。最常调整的字段包括：
+    - 处理与重试行为：`chunk_size`, `max_concurrent_workers`, `max_retries`, `request_timeout`。
+    - LLM 分析：`llm_provider`, `llm_base_url`, `llm_model`、思考相关选项、`system_prompt` 和 `user_interests`。
+    - 筛选与输出：`relevance_threshold`，以及本地 Markdown/CSV 文件保存目录 `export_directory`。
+    - arXiv 抓取：`arxiv_max_lookback_days` 以及 arXiv 批量/API 设置。
+    - DBLP、Crossref、Semantic Scholar、OpenAlex、Zotero 等外部 API 的地址与批量限制。
+- `tags.yaml`: 供 LLM 分类的受控标签表。标签按类别组织，但分析结果只会保留配置列表中完全匹配的标签字符串。
 - `venues.yaml`: 目标数据源配置：
     - DBLP 出处: 会议和期刊的 URL 映射（如 `CONFERENCE: {url1: ..., url2: ...}`）
     - arXiv 分类: arXiv 预印本的分类列表（如 `ARXIV: [cs.CV, cs.AI, cs.LG]`）
@@ -374,7 +433,7 @@ paper_scout -s 2024 -e 2025 --stage filter
 # 仅执行输出阶段(根据 output-mode 上传至 Zotero, 导出 Markdown 或无动作)
 paper_scout -s 2024 -e 2025 --stage output
 # 按状态(如 COMPLETED)查询论文并导出为 CSV 文件
-paper_scout -s 2024 -e 2025 --query COMPLETED
+paper_scout -s 2024 -e 2025 --query-status COMPLETED
 # 或使用简写参数:
 paper_scout -s 2024 -e 2025 -q COMPLETED
 # 从 CSV 文件中导入更新
@@ -392,14 +451,23 @@ paper_scout -s 2024 -e 2025 -i path/to/updates.csv
 - **可选参数**：
     - `--output-mode, -o`: 筛选后的输出模式（可选：`none`, `upload`, `export`。默认：`export`）。
         - `none`: 仅完成分析和筛选，不进行任何导出或上传。
-        - `upload`: 将筛选后的论文上传至指定的 Zotero 库。
+        - `upload`: 将筛选后的论文上传至配置的 Zotero inbox 集合。
         - `export`: 将筛选后的论文保存为格式化的本地 Markdown 文件。
     - `--log-directory`: 日志存储目录（默认：`logs`）。
     - `--log-level`: 日志记录级别（可选：`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`）。
 
+### 导出文件格式
+
+除非另行配置，生成的文件会写入 `configs.yaml` 中的 `export_directory`（默认：`exports/`）。
+
+- **Markdown 论文笔记**：在输出阶段使用 `--output-mode export` 时生成。PaperScout 会为每篇相关论文创建一个 `.md` 文件，文件名来自清理并限制长度后的论文标题。每个文件包含 YAML front matter（`title`, `doi`, `year`, `venue`, `tags`, `relevance_score`）、原始标题与中文标题、原始摘要与中文摘要、来源信息、AI 相关性分析、标签，以及空白阅读笔记区。
+- **查询 CSV 文件**：通过 `--query-status/-q` 查询并交互确认后生成。默认文件名为 `export_<STATUS>_<START_YEAR>_<END_YEAR>.csv`；自定义文件名会自动补齐 `.csv` 后缀。已存在的 CSV 会继续追加，新文件会写入 UTF-8 BOM 以兼容表格软件。列包括 `DOI`, `Year`, `Venue Type`, `Venue`, `Title`, `Abstract`, `Title (CN)`, `Abstract (CN)`, `Relevance Score`, `Relevance Reason`, `Tags`, `Status`, `Retry Count`, `Create Time`, `Update Time`。其中 `Tags` 列保存数据库中的 JSON 字符串。
+- **Zotero 条目**：在输出阶段使用 `--output-mode upload` 时生成。PaperScout 会创建 Zotero `journalArticle` 条目，把原始标题和摘要写入 Zotero 字段，跳过伪 DOI，将中文翻译和 AI 分析写入 `Extra`，把提取的标签映射为 Zotero 标签，并将条目加入 `zotero_inbox_key` 指定的集合。
+- **日志文件**：运行日志会写入 `--log-directory`（默认：`logs`）。
+
 ### CSV 导入规范
 
-在使用 `--import-csv` 功能时，**强烈建议修改通过 `--query` 状态查询功能导出的 CSV 文件**，尽量避免从头手动编写。如果必须自行编写，请遵守以下规则：
+在使用 `--import-csv` 功能时，**强烈建议修改通过 `--query-status` 状态查询功能导出的 CSV 文件**，尽量避免从头手动编写。如果必须自行编写，请遵守以下规则：
 
 - **表头**：CSV 必须包含表头行。工具始终把第一行当作列名处理；不支持无表头 CSV，即使其列顺序与导出的 CSV 完全一致。
 - **必填列**：表头中必须包含 `DOI` 列。数据库中不存在的 DOI 对应的整行数据会被直接忽略。空文件或空表头会报告 `CSV header missing`；有表头但缺少 `DOI` 列会报告 `CSV header missing required column: DOI`。
@@ -418,6 +486,10 @@ paper_scout -s 2024 -e 2025 -i path/to/updates.csv
 │   ├── configs.yaml          # 系统配置 (由 .example.yaml 复制)
 │   ├── tags.yaml             # LLM 标签 (由 .example.yaml 复制)
 │   └── venues.yaml           # DBLP 目标链接 (由 .example.yaml 复制)
+├── docs/
+│   └── paper-analysis-prompt.md # 中英双语提示词模板
+├── skills/
+│   └── paper-analysis/       # 论文分析 skill
 ├── db/                       # SQLite 数据库存储目录 (自动生成)
 ├── exports/                  # 本地 CSV / Markdown 文件目录 (自动生成)
 ├── logs/                     # 日志文件目录 (自动生成)
@@ -425,7 +497,7 @@ paper_scout -s 2024 -e 2025 -i path/to/updates.csv
 │   └── paper_scout/          # 主包目录
 │       ├── core/             # 核心模块 (配置、HTTP客户端、常量、日志)
 │       ├── database/         # SQLite 模型 (SQLAlchemy) 与增删改查逻辑
-│       ├── service/          # 核心业务逻辑 (获取、解析、分析、上传)
+│       ├── service/          # 核心业务逻辑 (获取、解析、分析、筛选、导出、导入、上传)
 │       ├── __init__.py
 │       ├── main.py           # 命令行入口
 │       └── pipeline.py       # 工作流调度
