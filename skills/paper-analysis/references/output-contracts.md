@@ -63,8 +63,8 @@ Rules:
 - `title_cn`: Chinese title translation when `output_language=zh`; empty string when `output_language=en`.
 - `abstract_cn`: Chinese abstract translation when `output_language=zh`; empty string when `output_language=en`.
 - `relevance_reason`: single-line scoring explanation using the template for the selected `output_language`.
-  - zh vetoed: `0.0 | 触发否决项: <原因>`
-  - zh normal: `<分数> | 基础分X.X(标准1: X.X, <原因>; 标准2: X.X, <原因>...)。扣分项: -X.X(<原因>)。加分项: +X.X(<原因>)。`
+  - zh vetoed: `0.0 | 触发否决项: <理由>`
+  - zh normal: `<分数> | 基础分X.X(标准1: X.X, <理由>; 标准2: X.X, <理由>...)。扣分项: -X.X(<理由>)。加分项: +X.X(<理由>)。`
   - en vetoed: `0.0 | Veto: <reason>`
   - en normal: `<score> | Base score X.X(Criterion 1: X.X, <reason>; Criterion 2: X.X, <reason>...). Penalty: -X.X(<reason>). Bonus: +X.X(<reason>).`
   - Omit the penalty sentence if no penalty applies.
